@@ -6,6 +6,15 @@
 #include<Qt>
 #include <QMessageBox>
 
+#include <QProcess>
+#include <QProgressDialog>
+#include <QFileInfo>
+#include <QCoreApplication>
+#include <QDesktopServices>
+#include <QUrl>
+#include <QDir>
+#include <QDebug>
+
 TrimmerDialog::TrimmerDialog(const QString& videoPath, QWidget* parent)
     : QDialog(parent), m_videoPath(videoPath)
 {
@@ -129,10 +138,147 @@ void TrimmerDialog::togglePlayPause() {
 }
 
 void TrimmerDialog::triggerRender() {
-    // TODO: ffmpeg functionality
-    QMessageBox::information(this, "Render Request",
-        QString("Sending slice arguments to FFmpeg:\nStart: %1\nEnd: %2")
-        .arg(formatTime(m_startTime)).arg(formatTime(m_endTime)));
+    auto& settings = AppSettings::get();
+    bool limitSize = settings.value("limit_size").toBool();
+    int maxSizeMB = settings.value("max_size_mb").toInt();
+    int fps = settings.value("fps").toInt();
+    double speed = settings.value("speed").toDouble();
+
+    // 1. Calculate Timestamps
+    double startSec = m_startTime / 1000.0;
+    double originalDuration = (m_endTime - m_startTime) / 1000.0;
+    double finalDuration = originalDuration / speed;
+
+    if (finalDuration <= 0) {
+        QMessageBox::warning(this, "Trim Error", "Invalid duration. Check your markers.");
+        return;
+    }
+
+    // 2. Setup File Paths
+    QFileInfo inputInfo(m_videoPath);
+    QString outPath = inputInfo.absolutePath() + "/" + inputInfo.baseName() + "_trimmed.mp4";
+    QString passLogPrefix = inputInfo.absolutePath() + "/ffmpeg_2pass_log";
+
+    QString appDir = QCoreApplication::applicationDirPath();
+    QString ffmpegExe = QDir(appDir).filePath("bin/ffmpeg/win/ffmpeg.exe");
+    if (!QFileInfo::exists(ffmpegExe)) {
+        ffmpegExe = "ffmpeg";
+    }
+
+    // 3. Build the Base FFmpeg Arguments & Filters
+    QStringList baseArgs;
+    baseArgs << "-y"
+        << "-ss" << QString::number(startSec, 'f', 3)
+        << "-i" << m_videoPath
+        << "-t" << QString::number(originalDuration, 'f', 3);
+
+    QStringList filterArgs;
+    QStringList vf;
+    if (fps > 0) vf << QString("fps=%1").arg(fps);
+    if (speed != 1.0) vf << QString("setpts=%1*PTS").arg(1.0 / speed);
+
+    if (!vf.isEmpty()) filterArgs << "-vf" << vf.join(",");
+    if (speed != 1.0) filterArgs << "-af" << QString("atempo=%1").arg(speed);
+
+    // 4. Calculate Bitrate Target with a 5% Safety Margin
+    int videoBitrateK = 0;
+    if (limitSize) {
+        double safeTargetMB = maxSizeMB * 0.95;
+        double totalKbps = (safeTargetMB * 8192.0) / finalDuration;
+        videoBitrateK = qMax(50, (int)(totalKbps - 128));
+    }
+
+    // 5. Setup the Indeterminate Loading UI (Range 0, 0 makes it bounce)
+    QProgressDialog progress("Rendering Video...", "Cancel", 0, 0, this);
+    progress.setWindowModality(Qt::WindowModal);
+    progress.setAutoClose(true);
+    progress.show();
+
+    // Clean Process Runner
+    auto runProcess = [&](const QStringList& args) -> bool {
+        QProcess p;
+        p.start(ffmpegExe, args);
+
+        while (!p.waitForFinished(100)) {
+            QCoreApplication::processEvents();
+            if (progress.wasCanceled()) {
+                p.kill();
+                return false;
+            }
+        }
+        return p.exitCode() == 0;
+        };
+
+    // 6. Execution Block
+    if (!limitSize) {
+        progress.setLabelText("Rendering High Quality Cut...");
+        QStringList args = baseArgs + filterArgs;
+        args << "-c:v" << "libx264" << "-crf" << "18"
+            << "-c:a" << "aac" << "-b:a" << "128k"
+            << outPath;
+
+        if (!runProcess(args)) return;
+    }
+    else {
+        int attempts = 0;
+        bool fileIsTooBig = true;
+        const int MAX_ATTEMPTS = 3;
+
+        while (fileIsTooBig && attempts < MAX_ATTEMPTS) {
+            attempts++;
+
+            progress.setLabelText(QString("Analyzing Video (Attempt %1)...").arg(attempts));
+
+            // CLEAN REBUILD of arguments for Pass 1
+            QStringList pass1Args = baseArgs + filterArgs;
+            pass1Args << "-c:v" << "libx264" << "-b:v" << QString("%1k").arg(videoBitrateK)
+                << "-pass" << "1" << "-passlogfile" << passLogPrefix
+                << "-an" << "-f" << "mp4" << "NUL";
+
+            if (!runProcess(pass1Args)) return;
+
+            progress.setLabelText(QString("Writing Final Data (Attempt %1)...").arg(attempts));
+
+            // CLEAN REBUILD of arguments for Pass 2
+            QStringList pass2Args = baseArgs + filterArgs;
+            pass2Args << "-c:v" << "libx264"
+                << "-b:v" << QString("%1k").arg(videoBitrateK)
+                << "-maxrate" << QString("%1k").arg(videoBitrateK)      // Hard cap
+                << "-bufsize" << QString("%1k").arg(videoBitrateK * 2)  // Enforce cap
+                << "-pass" << "2" << "-passlogfile" << passLogPrefix
+                << "-c:a" << "aac" << "-b:a" << "128k"
+                << outPath;
+
+            if (!runProcess(pass2Args)) return;
+
+            // 7. Post-Render Size Audit
+            QFile finalFile(outPath); // QFile evaluates exact disk bytes immediately
+            double actualMB = finalFile.size() / (1024.0 * 1024.0);
+
+            if (actualMB <= maxSizeMB) {
+                fileIsTooBig = false; // It fits! Break the loop.
+            }
+            else {
+                progress.setLabelText("Limit exceeded. Re-compressing...");
+                videoBitrateK = (int)(videoBitrateK * 0.80); // Drop bitrate by a hard 20%
+            }
+        }
+
+        // Warning if it failed all 3 attempts
+        if (fileIsTooBig) {
+            QMessageBox::warning(this, "Size Limit Failed",
+                "Could not compress the file enough without destroying the video completely.\nTry a shorter clip.");
+        }
+
+        // Cleanup the temporary FFmpeg log files
+        QFile::remove(passLogPrefix + "-0.log");
+        QFile::remove(passLogPrefix + "-0.log.mbtree");
+    }
+
+    // 7. Success! Open the folder
+    progress.close();
+    QDesktopServices::openUrl(QUrl::fromLocalFile(inputInfo.absolutePath()));
+
     accept();
 }
 

@@ -4,6 +4,7 @@
 #include <QSettings>
 #include <QPushButton>
 #include <QSpinBox>
+#include <QCheckBox>
 #include <QDoubleSpinBox>
 #include <QLabel>
 #include <QKeyEvent>
@@ -21,6 +22,9 @@ public:
     static void initDefaults() {
         if (!get().contains("fps")) get().setValue("fps", 60);
         if (!get().contains("speed")) get().setValue("speed", 1.0);
+
+        if (!get().contains("limit_size")) get().setValue("limit_size", false);
+        if (!get().contains("max_size_mb")) get().setValue("max_size_mb", 10); // 10MB is the discord limit
 
         // Default Keybinds
         if (!get().contains("key_start")) get().setValue("key_start", Qt::Key_I);
@@ -66,6 +70,8 @@ private slots:
 private:
     QSpinBox* m_spinFps;
     QDoubleSpinBox* m_spinSpeed;
+    QCheckBox* m_chkMaxSize;
+    QSpinBox* m_spinMaxSize;
 
     KeybindButton* m_btnStart;
     KeybindButton* m_btnEnd;

@@ -32,7 +32,9 @@ Shear::Shear(QWidget* parent)
     connect(ui.btnPrev, &QPushButton::clicked, this, &Shear::onPrevPage);
     connect(ui.spinDepth, &QSpinBox::valueChanged, this, &Shear::onRefreshClicked);
 
-   connect(ui.listThumbnails, &QListWidget::itemDoubleClicked, this, &Shear::onVideoDoubleClicked);
+	connect(ui.listThumbnails, &QListWidget::itemDoubleClicked, this, &Shear::onVideoDoubleClicked);
+
+    ui.listThumbnails->installEventFilter(this);
 
     loadSettings();
 }
@@ -297,4 +299,22 @@ void Shear::keyPressEvent(QKeyEvent* event)
     default:
         QMainWindow::keyPressEvent(event);
     }
+}
+
+bool Shear::eventFilter(QObject* obj, QEvent* event)
+{
+    if (obj == ui.listThumbnails && event->type() == QEvent::KeyPress) {
+
+        QKeyEvent* keyEvent = static_cast<QKeyEvent*>(event);
+        int key = keyEvent->key();
+
+        if (key == Qt::Key_R || key == Qt::Key_Comma || key == Qt::Key_Period) {
+
+            keyPressEvent(keyEvent);
+
+            return true;
+        }
+    }
+
+    return QMainWindow::eventFilter(obj, event);
 }

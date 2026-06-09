@@ -62,6 +62,21 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent) {
     m_spinSpeed->setSingleStep(0.1);
     m_spinSpeed->setValue(AppSettings::get().value("speed").toDouble());
 
+    m_chkMaxSize = new QCheckBox("Target Max Size:", this);
+    m_chkMaxSize->setToolTip("If unchecked, rendering will maintain the original video bitrate.");
+    m_chkMaxSize->setChecked(AppSettings::get().value("limit_size").toBool());
+
+    m_spinMaxSize = new QSpinBox(this);
+    m_spinMaxSize->setRange(1, 10000); // 1MB to 10GB
+    m_spinMaxSize->setSuffix(" MB");
+    m_spinMaxSize->setValue(AppSettings::get().value("max_size_mb").toInt());
+
+    // Immediately gray out the spinbox if the checkbox is not checked
+    m_spinMaxSize->setEnabled(m_chkMaxSize->isChecked());
+
+    // Wire them together so clicking the checkbox enables/disables the spinbox live
+    connect(m_chkMaxSize, &QCheckBox::toggled, m_spinMaxSize, &QSpinBox::setEnabled);
+
     m_btnStart = new KeybindButton("key_start", this);
     m_btnEnd = new KeybindButton("key_end", this);
     m_btnPlay = new KeybindButton("key_play", this);
@@ -73,6 +88,7 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent) {
     QFormLayout* formLayout = new QFormLayout();
     formLayout->addRow("Output FPS:", m_spinFps);
     formLayout->addRow("Playback Speed:", m_spinSpeed);
+    formLayout->addRow(m_chkMaxSize, m_spinMaxSize);
     formLayout->addRow(new QLabel(""), new QLabel("")); // Spacer
     formLayout->addRow("Set Start Marker:", m_btnStart);
     formLayout->addRow("Set End Marker:", m_btnEnd);
@@ -96,6 +112,8 @@ void SettingsDialog::onSaveClicked() {
     auto& settings = AppSettings::get();
     settings.setValue("fps", m_spinFps->value());
     settings.setValue("speed", m_spinSpeed->value());
+    settings.setValue("limit_size", m_chkMaxSize->isChecked());
+    settings.setValue("max_size_mb", m_spinMaxSize->value());
 
     settings.setValue("key_start", m_btnStart->currentKey());
     settings.setValue("key_end", m_btnEnd->currentKey());
