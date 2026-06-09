@@ -7,6 +7,8 @@
 #include <QProcess>
 #include <QFileInfo> 
 #include <QCoreApplication>
+#include <QDesktopServices>
+#include <QUrl>
 #include "TrimmerDialog.h"
 #include "SettingsDialog.h"
 
@@ -33,6 +35,16 @@ Shear::Shear(QWidget* parent)
     connect(ui.spinDepth, &QSpinBox::valueChanged, this, &Shear::onRefreshClicked);
 
 	connect(ui.listThumbnails, &QListWidget::itemDoubleClicked, this, &Shear::onVideoDoubleClicked);
+
+    connect(ui.btnOpenFolder, &QPushButton::clicked, this, [this]() {
+        QString currentDir = ui.linePath->text();
+        if (!currentDir.isEmpty() && QDir(currentDir).exists()) {
+            QDesktopServices::openUrl(QUrl::fromLocalFile(currentDir));
+        }
+        else {
+            QMessageBox::warning(this, "Error", "Directory does not exist.");
+        }
+        });
 
     ui.listThumbnails->installEventFilter(this);
 
@@ -253,7 +265,7 @@ void Shear::onVideoDoubleClicked(QListWidgetItem* item)
     QString videoPath = item->toolTip();
 
     // Spawn our new custom workspace window modally
-    TrimmerDialog trimmer(videoPath, this);
+    TrimmerDialog trimmer(videoPath, m_currentDir, this);
     trimmer.exec();
 }
 

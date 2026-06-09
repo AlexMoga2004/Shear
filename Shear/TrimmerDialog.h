@@ -53,7 +53,7 @@ class TrimmerDialog : public QDialog
     Q_OBJECT
 
 public:
-    TrimmerDialog(const QString& videoPath, QWidget* parent = nullptr);
+    TrimmerDialog(const QString& videoPath, const QString& baseScanDir, QWidget* parent = nullptr);
     ~TrimmerDialog();
 
 protected:
@@ -70,6 +70,7 @@ private slots:
 
 private:
     QString m_videoPath;
+    QString m_baseScanDir;
 
     QMediaPlayer* m_player;
     QVideoWidget* m_videoWidget;

@@ -3,6 +3,7 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QTime>
+#include <QDateTime>
 #include<Qt>
 #include <QMessageBox>
 
@@ -17,8 +18,8 @@
 #include <QClipboard>
 #include <QMimeData>
 
-TrimmerDialog::TrimmerDialog(const QString& videoPath, QWidget* parent)
-    : QDialog(parent), m_videoPath(videoPath)
+TrimmerDialog::TrimmerDialog(const QString& videoPath, const QString &baseScanDir, QWidget* parent)
+    : QDialog(parent), m_videoPath(videoPath), m_baseScanDir(baseScanDir)
 {
     setWindowTitle("Trim Workspace - " + videoPath);
     resize(800, 600);
@@ -159,29 +160,39 @@ void TrimmerDialog::triggerRender() {
     // 2. Setup File Paths & Nested Folders
     int resolution = settings.value("resolution").toInt();
 
-    // 2. Setup File Paths & Nested Folders
     QFileInfo inputInfo(m_videoPath);
     QString originalDir = inputInfo.absolutePath();
-    QString baseName = inputInfo.baseName();
-    QString parentFolderName = inputInfo.dir().dirName();
+    QString baseName = inputInfo.completeBaseName();
+
+    // Calculate the exact folder tree between your search start point and the video
+    QDir baseDir(m_baseScanDir);
+    QString relativeFolderTree = baseDir.relativeFilePath(originalDir);
 
     QString customSaveDir = settings.value("save_dir").toString();
     QString targetDir = originalDir;
 
     if (!customSaveDir.isEmpty() && QDir(customSaveDir).exists()) {
-        targetDir = customSaveDir + "/" + parentFolderName;
+        // If relativeFolderTree is ".", it means Depth was 0 (the video is directly in the base folder).
+        // We check for "." so we don't accidentally create weird paths like "D:/Clips/."
+        if (relativeFolderTree == ".") {
+            targetDir = customSaveDir;
+        }
+        else {
+            targetDir = customSaveDir + "/" + relativeFolderTree;
+        }
+
         QDir().mkpath(targetDir);
     }
 
+    // --- SMART & SAFE FILENAME ---
     QString outPath;
+    QString timeStamp = QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss");
+
     if (targetDir == originalDir) {
-        // DANGER: Saving in the same folder! 
-        // We MUST append something, otherwise it overwrites the original raw footage.
-        outPath = targetDir + "/" + baseName + "_trimmed.mp4";
+        outPath = targetDir + "/" + baseName + "_trimmed_" + timeStamp + ".mp4";
     }
     else {
-        // SAFE: Saving to a custom folder. We can use the exact original name.
-        outPath = targetDir + "/" + baseName + ".mp4";
+        outPath = targetDir + "/" + baseName + ".mp4"; // Original name preserved
     }
 
     QString passLogPrefix = targetDir + "/ffmpeg_2pass_log";
@@ -304,8 +315,6 @@ void TrimmerDialog::triggerRender() {
     }
 
     //// 7. Success! Open the folder
-    //progress.close();
-    //QDesktopServices::openUrl(QUrl::fromLocalFile(inputInfo.absolutePath()));
 
     progress.close();
 
@@ -314,11 +323,18 @@ void TrimmerDialog::triggerRender() {
     mimeData->setUrls({ QUrl::fromLocalFile(outPath) });
     QGuiApplication::clipboard()->setMimeData(mimeData);
 
-    // Give the user visual feedback so they know they can Ctrl+V
-    QMessageBox::information(this, "Success",
-        "Video rendered successfully!\n\nIt has been copied to your clipboard. You can now paste it directly into Discord.");
+    QMessageBox msgBox(this);
+    msgBox.setWindowTitle("Success");
+    msgBox.setText("Video rendered successfully!\n\nIt has been copied to your clipboard. You can paste it directly into Discord.");
 
-    accept();
+    QPushButton* btnOpenFolder = msgBox.addButton("Open Folder", QMessageBox::ActionRole);
+    msgBox.addButton(QMessageBox::Ok);
+
+    msgBox.exec();
+
+    if (msgBox.clickedButton() == btnOpenFolder) {
+        QDesktopServices::openUrl(QUrl::fromLocalFile(targetDir));
+    }
 
     accept();
 }
