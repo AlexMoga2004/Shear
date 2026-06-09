@@ -8,6 +8,7 @@
 #include <QDoubleSpinBox>
 #include <QLabel>
 #include <QKeyEvent>
+#include <QComboBox>
 #include <QFormLayout>
 
 // 1. Global Helper for instant access anywhere in the app
@@ -26,7 +27,9 @@ public:
         if (!get().contains("limit_size")) get().setValue("limit_size", false);
         if (!get().contains("max_size_mb")) get().setValue("max_size_mb", 10); // 10MB is the discord limit
 
-        // Default Keybinds
+        if (!get().contains("save_dir")) get().setValue("save_dir", "");
+        if (!get().contains("resolution")) get().setValue("resolution", 0);
+
         if (!get().contains("key_start")) get().setValue("key_start", Qt::Key_I);
         if (!get().contains("key_end")) get().setValue("key_end", Qt::Key_O);
         if (!get().contains("key_play")) get().setValue("key_play", Qt::Key_Space);
@@ -37,7 +40,6 @@ public:
     }
 };
 
-// 2. Custom Button to capture keystrokes
 class KeybindButton : public QPushButton {
     Q_OBJECT
 public:
@@ -58,11 +60,11 @@ private:
     void updateText();
 };
 
-// 3. The Main Settings Window
 class SettingsDialog : public QDialog {
     Q_OBJECT
 public:
     SettingsDialog(QWidget* parent = nullptr);
+    void onBrowseSaveDirClicked();
 
 private slots:
     void onSaveClicked();
@@ -72,6 +74,9 @@ private:
     QDoubleSpinBox* m_spinSpeed;
     QCheckBox* m_chkMaxSize;
     QSpinBox* m_spinMaxSize;
+    QLineEdit* m_lineSaveDir;
+    QPushButton* m_btnBrowseSaveDir;
+    QComboBox* m_comboResolution;
 
     KeybindButton* m_btnStart;
     KeybindButton* m_btnEnd;

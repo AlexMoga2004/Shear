@@ -2,6 +2,8 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QKeySequence>
+#include <QLineEdit>
+#include <QFileDialog>
 
 KeybindButton::KeybindButton(const QString& settingKey, QWidget* parent)
     : QPushButton(parent), m_settingKey(settingKey), m_isListening(false)
@@ -67,14 +69,22 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent) {
     m_chkMaxSize->setChecked(AppSettings::get().value("limit_size").toBool());
 
     m_spinMaxSize = new QSpinBox(this);
-    m_spinMaxSize->setRange(1, 10000); // 1MB to 10GB
+    m_spinMaxSize->setRange(1, 10000); 
     m_spinMaxSize->setSuffix(" MB");
     m_spinMaxSize->setValue(AppSettings::get().value("max_size_mb").toInt());
 
-    // Immediately gray out the spinbox if the checkbox is not checked
+    m_comboResolution = new QComboBox(this);
+    m_comboResolution->addItem("Original", 0);
+    m_comboResolution->addItem("1080p", 1080);
+    m_comboResolution->addItem("720p", 720);
+    m_comboResolution->addItem("480p", 480);
+
+    int savedRes = AppSettings::get().value("resolution").toInt();
+    int index = m_comboResolution->findData(savedRes);
+    if (index != -1) m_comboResolution->setCurrentIndex(index);
+
     m_spinMaxSize->setEnabled(m_chkMaxSize->isChecked());
 
-    // Wire them together so clicking the checkbox enables/disables the spinbox live
     connect(m_chkMaxSize, &QCheckBox::toggled, m_spinMaxSize, &QSpinBox::setEnabled);
 
     m_btnStart = new KeybindButton("key_start", this);
@@ -84,8 +94,20 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent) {
     m_btnForward = new KeybindButton("key_forward", this);
     m_btnRender = new KeybindButton("key_render", this);
     m_btnCancel = new KeybindButton("key_cancel", this);
+    m_lineSaveDir = new QLineEdit(this);
+    m_lineSaveDir->setText(AppSettings::get().value("save_dir").toString());
+    m_lineSaveDir->setPlaceholderText("Leave blank to save next to original file");
+
+    m_btnBrowseSaveDir = new QPushButton("Browse...", this);
+    connect(m_btnBrowseSaveDir, &QPushButton::clicked, this, &SettingsDialog::onBrowseSaveDirClicked);
+
+    QHBoxLayout* dirLayout = new QHBoxLayout();
+    dirLayout->addWidget(m_lineSaveDir);
+    dirLayout->addWidget(m_btnBrowseSaveDir);
 
     QFormLayout* formLayout = new QFormLayout();
+    formLayout->addRow("Default Save Folder:", dirLayout);
+    formLayout->addRow("Output Resolution:", m_comboResolution); 
     formLayout->addRow("Output FPS:", m_spinFps);
     formLayout->addRow("Playback Speed:", m_spinSpeed);
     formLayout->addRow(m_chkMaxSize, m_spinMaxSize);
@@ -114,6 +136,8 @@ void SettingsDialog::onSaveClicked() {
     settings.setValue("speed", m_spinSpeed->value());
     settings.setValue("limit_size", m_chkMaxSize->isChecked());
     settings.setValue("max_size_mb", m_spinMaxSize->value());
+    settings.setValue("resolution", m_comboResolution->currentData().toInt());
+    settings.setValue("save_dir", m_lineSaveDir->text());
 
     settings.setValue("key_start", m_btnStart->currentKey());
     settings.setValue("key_end", m_btnEnd->currentKey());
@@ -124,4 +148,15 @@ void SettingsDialog::onSaveClicked() {
     settings.setValue("key_cancel", m_btnCancel->currentKey());
 
     accept();
+}
+
+void SettingsDialog::onBrowseSaveDirClicked() {
+    QString currentDir = m_lineSaveDir->text().isEmpty() ? "C:/" : m_lineSaveDir->text();
+
+    QString dir = QFileDialog::getExistingDirectory(this, "Select Default Save Directory",
+        currentDir, QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+
+    if (!dir.isEmpty()) {
+        m_lineSaveDir->setText(QDir::toNativeSeparators(dir));
+    }
 }

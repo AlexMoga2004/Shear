@@ -14,6 +14,8 @@
 #include <QUrl>
 #include <QDir>
 #include <QDebug>
+#include <QClipboard>
+#include <QMimeData>
 
 TrimmerDialog::TrimmerDialog(const QString& videoPath, QWidget* parent)
     : QDialog(parent), m_videoPath(videoPath)
@@ -154,16 +156,38 @@ void TrimmerDialog::triggerRender() {
         return;
     }
 
-    // 2. Setup File Paths
-    QFileInfo inputInfo(m_videoPath);
-    QString outPath = inputInfo.absolutePath() + "/" + inputInfo.baseName() + "_trimmed.mp4";
-    QString passLogPrefix = inputInfo.absolutePath() + "/ffmpeg_2pass_log";
+    // 2. Setup File Paths & Nested Folders
+    int resolution = settings.value("resolution").toInt();
 
+    // 2. Setup File Paths & Nested Folders
+    QFileInfo inputInfo(m_videoPath);
+    QString originalDir = inputInfo.absolutePath();
+    QString baseName = inputInfo.baseName();
+    QString parentFolderName = inputInfo.dir().dirName();
+
+    QString customSaveDir = settings.value("save_dir").toString();
+    QString targetDir = originalDir;
+
+    if (!customSaveDir.isEmpty() && QDir(customSaveDir).exists()) {
+        targetDir = customSaveDir + "/" + parentFolderName;
+        QDir().mkpath(targetDir);
+    }
+
+    QString outPath;
+    if (targetDir == originalDir) {
+        // DANGER: Saving in the same folder! 
+        // We MUST append something, otherwise it overwrites the original raw footage.
+        outPath = targetDir + "/" + baseName + "_trimmed.mp4";
+    }
+    else {
+        // SAFE: Saving to a custom folder. We can use the exact original name.
+        outPath = targetDir + "/" + baseName + ".mp4";
+    }
+
+    QString passLogPrefix = targetDir + "/ffmpeg_2pass_log";
     QString appDir = QCoreApplication::applicationDirPath();
     QString ffmpegExe = QDir(appDir).filePath("bin/ffmpeg/win/ffmpeg.exe");
-    if (!QFileInfo::exists(ffmpegExe)) {
-        ffmpegExe = "ffmpeg";
-    }
+    if (!QFileInfo::exists(ffmpegExe)) ffmpegExe = "ffmpeg";
 
     // 3. Build the Base FFmpeg Arguments & Filters
     QStringList baseArgs;
@@ -177,8 +201,14 @@ void TrimmerDialog::triggerRender() {
     if (fps > 0) vf << QString("fps=%1").arg(fps);
     if (speed != 1.0) vf << QString("setpts=%1*PTS").arg(1.0 / speed);
 
+    // SCALE DOWN RESOLUTION (Uses -2 to ensure width is an even number, required by MP4)
+    if (resolution > 0) {
+        vf << QString("scale=-2:%1").arg(resolution);
+    }
+
     if (!vf.isEmpty()) filterArgs << "-vf" << vf.join(",");
     if (speed != 1.0) filterArgs << "-af" << QString("atempo=%1").arg(speed);
+
 
     // 4. Calculate Bitrate Target with a 5% Safety Margin
     int videoBitrateK = 0;
@@ -252,32 +282,43 @@ void TrimmerDialog::triggerRender() {
             if (!runProcess(pass2Args)) return;
 
             // 7. Post-Render Size Audit
-            QFile finalFile(outPath); // QFile evaluates exact disk bytes immediately
+            QFile finalFile(outPath); 
             double actualMB = finalFile.size() / (1024.0 * 1024.0);
 
             if (actualMB <= maxSizeMB) {
-                fileIsTooBig = false; // It fits! Break the loop.
+                fileIsTooBig = false; 
             }
             else {
                 progress.setLabelText("Limit exceeded. Re-compressing...");
-                videoBitrateK = (int)(videoBitrateK * 0.80); // Drop bitrate by a hard 20%
+                videoBitrateK = (int)(videoBitrateK * 0.80); // Drop bitrate by 20%
             }
         }
 
-        // Warning if it failed all 3 attempts
         if (fileIsTooBig) {
             QMessageBox::warning(this, "Size Limit Failed",
                 "Could not compress the file enough without destroying the video completely.\nTry a shorter clip.");
         }
 
-        // Cleanup the temporary FFmpeg log files
         QFile::remove(passLogPrefix + "-0.log");
         QFile::remove(passLogPrefix + "-0.log.mbtree");
     }
 
-    // 7. Success! Open the folder
+    //// 7. Success! Open the folder
+    //progress.close();
+    //QDesktopServices::openUrl(QUrl::fromLocalFile(inputInfo.absolutePath()));
+
     progress.close();
-    QDesktopServices::openUrl(QUrl::fromLocalFile(inputInfo.absolutePath()));
+
+    // Copy the rendered file directly to the Windows Clipboard
+    QMimeData* mimeData = new QMimeData();
+    mimeData->setUrls({ QUrl::fromLocalFile(outPath) });
+    QGuiApplication::clipboard()->setMimeData(mimeData);
+
+    // Give the user visual feedback so they know they can Ctrl+V
+    QMessageBox::information(this, "Success",
+        "Video rendered successfully!\n\nIt has been copied to your clipboard. You can now paste it directly into Discord.");
+
+    accept();
 
     accept();
 }
