@@ -8,6 +8,7 @@
 #include <QFileInfo> 
 #include <QCoreApplication>
 #include "TrimmerDialog.h"
+#include "SettingsDialog.h"
 
 Shear::Shear(QWidget* parent)
     : QMainWindow(parent)
@@ -23,6 +24,10 @@ Shear::Shear(QWidget* parent)
     connect(ui.linePath, &QLineEdit::editingFinished, this, &Shear::onPathEditingFinished);
 
     connect(ui.btnRefresh, &QPushButton::clicked, this, &Shear::onRefreshClicked);
+    connect(ui.btnSettings, &QPushButton::clicked, this, [this]() {
+        SettingsDialog dialog(this);
+        dialog.exec();
+        });
     connect(ui.btnNext, &QPushButton::clicked, this, &Shear::onNextPage);
     connect(ui.btnPrev, &QPushButton::clicked, this, &Shear::onPrevPage);
     connect(ui.spinDepth, &QSpinBox::valueChanged, this, &Shear::onRefreshClicked);
@@ -260,6 +265,7 @@ void Shear::keyPressEvent(QKeyEvent* event)
 
     switch (event->key()) {
     case Qt::Key_Return:
+    case Qt::Key_Space:
     case Qt::Key_Enter: {
         if (ui.listThumbnails->hasFocus()) {
             QListWidgetItem* current = ui.listThumbnails->currentItem();

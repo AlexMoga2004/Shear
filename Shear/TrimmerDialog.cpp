@@ -1,7 +1,9 @@
 #include "TrimmerDialog.h"
+#include "SettingsDialog.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QTime>
+#include<Qt>
 #include <QMessageBox>
 
 TrimmerDialog::TrimmerDialog(const QString& videoPath, QWidget* parent)
@@ -31,6 +33,8 @@ TrimmerDialog::TrimmerDialog(const QString& videoPath, QWidget* parent)
     m_btnCancel->setFocusPolicy(Qt::NoFocus);
 
     m_lblMarkers->setStyleSheet("font-weight: bold; color: #4CAF50; font-size: 14px;");
+
+    m_player->setPlaybackRate(AppSettings::get().value("speed", 1.0).toDouble());
 
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
 
@@ -134,43 +138,36 @@ void TrimmerDialog::triggerRender() {
 
 void TrimmerDialog::keyPressEvent(QKeyEvent* event)
 {
+    int key = event->key();
+    auto& settings = AppSettings::get();
+
     qint64 currentPos = m_player->position();
     qint64 newPos = currentPos;
 
-    switch (event->key()) {
-    case Qt::Key_I:
+    if (key == settings.value("key_start").toInt()) {
         setStartMarker();
-        break;
-    case Qt::Key_O:
+    }
+    else if (key == settings.value("key_end").toInt()) {
         setEndMarker();
-        break;
-
-    case Qt::Key_Space:
-    case Qt::Key_K: 
+    }
+    else if (key == settings.value("key_play").toInt()) {
         togglePlayPause();
-        break;
-
-    case Qt::Key_J:
-    case Qt::Key_Left:
-        newPos = qMax(0LL, currentPos - 5000); 
+    }
+    else if (key == settings.value("key_rewind").toInt() || key == Qt::Key_Left) {
+        newPos = qMax(0LL, currentPos - 5000);
         m_player->setPosition(newPos);
-        break;
-
-    case Qt::Key_L:
-    case Qt::Key_Right:
-        newPos = qMin(m_totalDuration, currentPos + 5000); 
+    }
+    else if (key == settings.value("key_forward").toInt() || key == Qt::Key_Right) {
+        newPos = qMin(m_totalDuration, currentPos + 5000);
         m_player->setPosition(newPos);
-        break;
-
-    case Qt::Key_Return:
-    case Qt::Key_Enter:
+    }
+    else if (key == settings.value("key_render").toInt()) {
         triggerRender();
-        break;
-    case Qt::Key_Backspace:
+    }
+    else if (key == settings.value("key_cancel").toInt()) {
         reject();
-        break;
-
-    default:
+    }
+    else {
         QDialog::keyPressEvent(event);
     }
 }

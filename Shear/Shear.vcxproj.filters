@@ -43,9 +43,15 @@
     <ClCompile Include="TrimmerDialog.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="SettingsDialog.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="TrimmerDialog.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
+    <QtMoc Include="SettingsDialog.h">
       <Filter>Header Files</Filter>
     </QtMoc>
   </ItemGroup>
