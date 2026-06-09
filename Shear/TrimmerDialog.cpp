@@ -314,11 +314,9 @@ void TrimmerDialog::triggerRender() {
         QFile::remove(passLogPrefix + "-0.log.mbtree");
     }
 
-    //// 7. Success! Open the folder
-
+    // 7. Success! Open the folder
     progress.close();
 
-    // Copy the rendered file directly to the Windows Clipboard
     QMimeData* mimeData = new QMimeData();
     mimeData->setUrls({ QUrl::fromLocalFile(outPath) });
     QGuiApplication::clipboard()->setMimeData(mimeData);
@@ -328,12 +326,30 @@ void TrimmerDialog::triggerRender() {
     msgBox.setText("Video rendered successfully!\n\nIt has been copied to your clipboard. You can paste it directly into Discord.");
 
     QPushButton* btnOpenFolder = msgBox.addButton("Open Folder", QMessageBox::ActionRole);
+    QPushButton* btnDeleteOrig = msgBox.addButton("Delete Original", QMessageBox::DestructiveRole);
     msgBox.addButton(QMessageBox::Ok);
 
     msgBox.exec();
 
+    // Route the user's choice
     if (msgBox.clickedButton() == btnOpenFolder) {
         QDesktopServices::openUrl(QUrl::fromLocalFile(targetDir));
+    }
+    else if (msgBox.clickedButton() == btnDeleteOrig) {
+        // THE SAFETY CATCH
+        QMessageBox::StandardButton reply;
+        reply = QMessageBox::warning(this, "Permanent Delete",
+            "Are you absolutely sure you want to delete the original raw footage?\n\nThis bypasses the Recycle Bin and CANNOT be undone.",
+            QMessageBox::Yes | QMessageBox::No);
+
+        if (reply == QMessageBox::Yes) {
+            if (QFile::remove(m_videoPath)) {
+                QMessageBox::information(this, "Deleted", "Original file removed.");
+            }
+            else {
+                QMessageBox::critical(this, "Error", "Could not delete the file. It may be open in another program.");
+            }
+        }
     }
 
     accept();
