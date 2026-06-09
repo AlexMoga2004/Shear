@@ -17,6 +17,7 @@ public:
 
 protected:
     void closeEvent(QCloseEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
 
 private slots:
     void onBrowseClicked();
@@ -26,7 +27,7 @@ private slots:
     void onNextPage();       
     void onPrevPage();       
 
-   // void onVideoDoubleClicked(QListWidgetItem* item);
+   void onVideoDoubleClicked(QListWidgetItem* item);
 
 
 private:

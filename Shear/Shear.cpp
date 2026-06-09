@@ -7,6 +7,7 @@
 #include <QProcess>
 #include <QFileInfo> 
 #include <QCoreApplication>
+#include "TrimmerDialog.h"
 
 Shear::Shear(QWidget* parent)
     : QMainWindow(parent)
@@ -26,7 +27,7 @@ Shear::Shear(QWidget* parent)
     connect(ui.btnPrev, &QPushButton::clicked, this, &Shear::onPrevPage);
     connect(ui.spinDepth, &QSpinBox::valueChanged, this, &Shear::onRefreshClicked);
 
-   // connect(ui.listThumbnails, &QListWidget::itemDoubleClicked, this, &Shear::onVideoDoubleClicked);
+   connect(ui.listThumbnails, &QListWidget::itemDoubleClicked, this, &Shear::onVideoDoubleClicked);
 
     loadSettings();
 }
@@ -190,6 +191,11 @@ void Shear::renderCurrentPage()
         currentItems[i]->setIcon(QIcon(realThumb));
         QApplication::processEvents();
     }
+
+    if (ui.listThumbnails->count() > 0) {
+        ui.listThumbnails->setCurrentRow(0); 
+        ui.listThumbnails->setFocus();       
+    }
 }
 
 QString Shear::getFFmpegPath()
@@ -233,4 +239,56 @@ QPixmap Shear::generateThumbnail(const QString& videoPath)
     }
 
     return pixmap;
+}
+
+void Shear::onVideoDoubleClicked(QListWidgetItem* item)
+{
+    QString videoPath = item->toolTip();
+
+    // Spawn our new custom workspace window modally
+    TrimmerDialog trimmer(videoPath, this);
+    trimmer.exec();
+}
+
+void Shear::keyPressEvent(QKeyEvent* event)
+{
+    // GUARD: If the user is typing a folder path, let normal typing happen
+    if (ui.linePath->hasFocus()) {
+        QMainWindow::keyPressEvent(event);
+        return;
+    }
+
+    switch (event->key()) {
+    case Qt::Key_Return:
+    case Qt::Key_Enter: {
+        if (ui.listThumbnails->hasFocus()) {
+            QListWidgetItem* current = ui.listThumbnails->currentItem();
+            if (current) {
+                onVideoDoubleClicked(current);
+            }
+        }
+        break;
+    }
+
+    case Qt::Key_R: {
+        onRefreshClicked();
+        break;
+    }
+
+    case Qt::Key_Comma: { 
+        if (ui.btnPrev->isEnabled()) {
+            ui.btnPrev->click();
+        }
+        break;
+    }
+    case Qt::Key_Period: { 
+        if (ui.btnNext->isEnabled()) {
+            ui.btnNext->click();
+        }
+        break;
+    }
+
+    default:
+        QMainWindow::keyPressEvent(event);
+    }
 }
