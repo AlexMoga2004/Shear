@@ -1,0 +1,67 @@
+# ========================
+# Visual Studio
+# ========================
+.vs/
+*.user
+*.userosscache
+*.sln.docstates
+*.suo
+*.db
+*.opendb
+*.VC.db
+
+# ========================
+# Build Folders
+# ========================
+x64/
+x86/
+Debug/
+Release/
+out/
+build/
+Shear/x64/
+Shear/Debug/
+Shear/Release/
+
+# ========================
+# C++ Artifacts
+# ========================
+*.slo
+*.lo
+*.o
+*.obj
+*.so
+*.dylib
+*.dll
+*.lai
+*.la
+*.a
+*.lib
+*.pdb
+*.ilk
+*.exp
+
+# ========================
+# Executables
+# ========================
+*.exe
+*.out
+*.app
+
+# --- EXCEPTION ---
+# Allow the bundled FFmpeg binary to be tracked by Git
+!Shear/bin/ffmpeg/**/*.exe
+!Shear/bin/ffmpeg/**/*.dll
+
+# ========================
+# Qt Specific
+# ========================
+moc_*.cpp
+moc_*.h
+qrc_*.cpp
+ui_*.h
+Makefile*
+*.qmake.stash
+*.stash
+*.qmlc
+*.jsc
