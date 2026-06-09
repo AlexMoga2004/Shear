@@ -59,7 +59,7 @@
 									</size>
 								</property>
 								<property name="placeholderText">
-									<string>C:\Videos\Clips</string>
+									<string>Please select a folder</string>
 								</property>
 							</widget>
 						</item>

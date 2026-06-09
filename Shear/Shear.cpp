@@ -1,18 +1,22 @@
 #include "Shear.h"
-#include <QFileDialog>  // Needed for the folder picker
-#include <QDir>         // Needed to check if a folder exists
-#include <QMessageBox>  // Needed for error popups
+#include <QFileDialog>  
+#include <QDir>        
+#include <QMessageBox> 
+#include <QSettings>
 
 Shear::Shear(QWidget* parent)
     : QMainWindow(parent)
 {
     ui.setupUi(this);
 
-    // 1. Connect the browse button to our function
-    connect(ui.btnBrowse, &QPushButton::clicked, this, &Shear::onBrowseClicked);
+    ui.btnRefresh->setToolTip("Refresh directory");
+    ui.btnSettings->setToolTip("Settings");
+    ui.btnBrowse->setToolTip("Select folder");
 
-    // 2. Connect the text box so it validates when the user hits Enter or clicks away
+    connect(ui.btnBrowse, &QPushButton::clicked, this, &Shear::onBrowseClicked);
     connect(ui.linePath, &QLineEdit::editingFinished, this, &Shear::onPathEditingFinished);
+
+    loadSettings();
 }
 
 Shear::~Shear()
@@ -21,13 +25,11 @@ Shear::~Shear()
 
 void Shear::onBrowseClicked()
 {
-    // Open the native Windows folder selection dialog
     QString startDir = ui.linePath->text().isEmpty() ? "C:/" : ui.linePath->text();
 
     QString dir = QFileDialog::getExistingDirectory(this, "Select Video Directory",
         startDir,
         QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
-    // If they picked a folder (didn't hit cancel), update the text box
     if (!dir.isEmpty()) {
         ui.linePath->setText(QDir::toNativeSeparators(dir));
     }
@@ -37,17 +39,38 @@ void Shear::onPathEditingFinished()
 {
     QString path = ui.linePath->text();
 
-    // Do nothing if it's empty
     if (path.isEmpty()) return;
 
-    // Check if the directory actually exists on the hard drive
     QDir dir(path);
     if (!dir.exists()) {
-        // Pop up an error message
         QMessageBox::warning(this, "Invalid Directory", "The directory you entered does not exist.\nPlease check for typos.");
 
-        // Bring their cursor back to the box and highlight the bad text
         ui.linePath->setFocus();
         ui.linePath->selectAll();
     }
+}
+
+void Shear::loadSettings()
+{
+    QSettings settings;
+
+    QString lastDir = settings.value("lastDirectory", "C:/").toString();
+    int lastDepth = settings.value("folderDepth", 1).toInt();
+
+    ui.linePath->setText(lastDir);
+    ui.spinDepth->setValue(lastDepth);
+}
+
+void Shear::saveSettings()
+{
+    QSettings settings;
+
+    settings.setValue("lastDirectory", ui.linePath->text());
+    settings.setValue("folderDepth", ui.spinDepth->value());
+}
+
+void Shear::closeEvent(QCloseEvent* event)
+{
+    saveSettings();
+    QMainWindow::closeEvent(event);
 }
