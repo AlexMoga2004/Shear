@@ -44,7 +44,7 @@ TrimmerDialog::TrimmerDialog(const QString& videoPath, const QString &baseScanDi
 
     m_lblMarkers->setStyleSheet("font-weight: bold; color: #4CAF50; font-size: 14px;");
 
-    m_player->setPlaybackRate(AppSettings::get().value("speed", 1.0).toDouble());
+    m_player->setPlaybackRate(AppSettings::get().value("playback_speed", 1.0).toDouble());
 
     auto& settings = AppSettings::get();
 
@@ -185,7 +185,7 @@ void TrimmerDialog::triggerRender() {
     bool limitSize = settings.value("limit_size").toBool();
     int maxSizeMB = settings.value("max_size_mb").toInt();
     int fps = settings.value("fps").toInt();
-    double speed = settings.value("speed").toDouble();
+    double speed = settings.value("render_speed", 1.0).toDouble();
 
     // 1. Calculate Timestamps
     double startSec = m_startTime / 1000.0;

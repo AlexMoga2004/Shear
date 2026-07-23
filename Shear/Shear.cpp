@@ -53,11 +53,29 @@ Shear::Shear(QWidget* parent)
     m_shortcutRefresh = new QShortcut(QKeySequence(Qt::Key_R), this);
     connect(m_shortcutRefresh, &QShortcut::activated, this, &Shear::onRefreshClicked);
 
-    m_shortcutPrev = new QShortcut(QKeySequence(Qt::Key_Comma), this);
+    // -- Global Page Shortcuts (Reverted to Comma and Period by default) --
+    m_shortcutPrev = new QShortcut(QKeySequence(AppSettings::get().value("key_prev_page", Qt::Key_Comma).toInt()), this);
     connect(m_shortcutPrev, &QShortcut::activated, ui.btnPrev, &QPushButton::click);
 
-    m_shortcutNext = new QShortcut(QKeySequence(Qt::Key_Period), this);
+    m_shortcutNext = new QShortcut(QKeySequence(AppSettings::get().value("key_next_page", Qt::Key_Period).toInt()), this);
     connect(m_shortcutNext, &QShortcut::activated, ui.btnNext, &QPushButton::click);
+
+    // -- Vim Thumbnail Navigation (Only active when the list is focused) --
+    // This lambda generates a fake keypress and sends it to the QListWidget
+    auto sendArrowKey = [this](Qt::Key key) {
+        QKeyEvent* event = new QKeyEvent(QEvent::KeyPress, key, Qt::NoModifier);
+        QCoreApplication::postEvent(ui.listThumbnails, event);
+        };
+
+    QShortcut* cutNavLeft = new QShortcut(QKeySequence(AppSettings::get().value("key_nav_left", Qt::Key_H).toInt()), ui.listThumbnails, nullptr, nullptr, Qt::WidgetShortcut);
+    QShortcut* cutNavDown = new QShortcut(QKeySequence(AppSettings::get().value("key_nav_down", Qt::Key_J).toInt()), ui.listThumbnails, nullptr, nullptr, Qt::WidgetShortcut);
+    QShortcut* cutNavUp = new QShortcut(QKeySequence(AppSettings::get().value("key_nav_up", Qt::Key_K).toInt()), ui.listThumbnails, nullptr, nullptr, Qt::WidgetShortcut);
+    QShortcut* cutNavRight = new QShortcut(QKeySequence(AppSettings::get().value("key_nav_right", Qt::Key_L).toInt()), ui.listThumbnails, nullptr, nullptr, Qt::WidgetShortcut);
+
+    connect(cutNavLeft, &QShortcut::activated, this, [=]() { sendArrowKey(Qt::Key_Left); });
+    connect(cutNavDown, &QShortcut::activated, this, [=]() { sendArrowKey(Qt::Key_Down); });
+    connect(cutNavUp, &QShortcut::activated, this, [=]() { sendArrowKey(Qt::Key_Up); });
+    connect(cutNavRight, &QShortcut::activated, this, [=]() { sendArrowKey(Qt::Key_Right); });
 
     // -- List-Specific Shortcuts --
     // Qt::WidgetShortcut context means these ONLY trigger when the thumbnail list has focus.
@@ -81,6 +99,17 @@ Shear::Shear(QWidget* parent)
 
 Shear::~Shear()
 {
+}
+
+void SettingsDialog::onBrowseSaveDirClicked() {
+    QString currentDir = m_lineSaveDir->text().isEmpty() ? "C:/" : m_lineSaveDir->text();
+
+    QString dir = QFileDialog::getExistingDirectory(this, "Select Default Save Directory",
+        currentDir, QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+
+    if (!dir.isEmpty()) {
+        m_lineSaveDir->setText(QDir::toNativeSeparators(dir));
+    }
 }
 
 void Shear::onBrowseClicked()

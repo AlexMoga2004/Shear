@@ -71,7 +71,8 @@ private slots:
 
 private:
     QSpinBox* m_spinFps;
-    QDoubleSpinBox* m_spinSpeed;
+    QDoubleSpinBox* m_spinPlaybackSpeed;
+    QDoubleSpinBox* m_spinRenderSpeed;
     QCheckBox* m_chkMaxSize;
     QSpinBox* m_spinMaxSize;
     QLineEdit* m_lineSaveDir;
@@ -85,5 +86,9 @@ private:
     KeybindButton* m_btnForward;
     KeybindButton* m_btnRender;
     KeybindButton* m_btnCancel;
+    KeybindButton* m_btnNavLeft;
+    KeybindButton* m_btnNavRight;
+    KeybindButton* m_btnNavUp;
+    KeybindButton* m_btnNavDown;
 };
 

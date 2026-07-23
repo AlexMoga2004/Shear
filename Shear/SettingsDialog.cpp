@@ -51,27 +51,38 @@ void KeybindButton::updateText() {
 
 SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent) {
     setWindowTitle("Preferences");
-    resize(350, 400);
+    resize(400, 450); // Made slightly taller to accommodate tabs
 
-    AppSettings::initDefaults();
+    AppSettings::initDefaults(); // Make sure to add "playback_speed", "render_speed", "key_prev_page" (Qt::Key_H), and "key_next_page" (Qt::Key_L) to this!
+
+    // --- VIDEO & OUTPUT TAB ---
+    QWidget* tabVideo = new QWidget();
+    QFormLayout* videoLayout = new QFormLayout(tabVideo);
 
     m_spinFps = new QSpinBox(this);
     m_spinFps->setRange(1, 240);
     m_spinFps->setValue(AppSettings::get().value("fps").toInt());
 
-    m_spinSpeed = new QDoubleSpinBox(this);
-    m_spinSpeed->setRange(0.1, 5.0);
-    m_spinSpeed->setSingleStep(0.1);
-    m_spinSpeed->setValue(AppSettings::get().value("speed").toDouble());
+    m_spinPlaybackSpeed = new QDoubleSpinBox(this);
+    m_spinPlaybackSpeed->setRange(0.1, 5.0);
+    m_spinPlaybackSpeed->setSingleStep(0.1);
+    m_spinPlaybackSpeed->setValue(AppSettings::get().value("playback_speed", 1.0).toDouble());
+
+    m_spinRenderSpeed = new QDoubleSpinBox(this);
+    m_spinRenderSpeed->setRange(0.1, 5.0);
+    m_spinRenderSpeed->setSingleStep(0.1);
+    m_spinRenderSpeed->setValue(AppSettings::get().value("render_speed", 1.0).toDouble());
 
     m_chkMaxSize = new QCheckBox("Target Max Size:", this);
     m_chkMaxSize->setToolTip("If unchecked, rendering will maintain the original video bitrate.");
     m_chkMaxSize->setChecked(AppSettings::get().value("limit_size").toBool());
 
     m_spinMaxSize = new QSpinBox(this);
-    m_spinMaxSize->setRange(1, 10000); 
+    m_spinMaxSize->setRange(1, 10000);
     m_spinMaxSize->setSuffix(" MB");
     m_spinMaxSize->setValue(AppSettings::get().value("max_size_mb").toInt());
+    m_spinMaxSize->setEnabled(m_chkMaxSize->isChecked());
+    connect(m_chkMaxSize, &QCheckBox::toggled, m_spinMaxSize, &QSpinBox::setEnabled);
 
     m_comboResolution = new QComboBox(this);
     m_comboResolution->addItem("Original", 0);
@@ -83,17 +94,6 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent) {
     int index = m_comboResolution->findData(savedRes);
     if (index != -1) m_comboResolution->setCurrentIndex(index);
 
-    m_spinMaxSize->setEnabled(m_chkMaxSize->isChecked());
-
-    connect(m_chkMaxSize, &QCheckBox::toggled, m_spinMaxSize, &QSpinBox::setEnabled);
-
-    m_btnStart = new KeybindButton("key_start", this);
-    m_btnEnd = new KeybindButton("key_end", this);
-    m_btnPlay = new KeybindButton("key_play", this);
-    m_btnRewind = new KeybindButton("key_rewind", this);
-    m_btnForward = new KeybindButton("key_forward", this);
-    m_btnRender = new KeybindButton("key_render", this);
-    m_btnCancel = new KeybindButton("key_cancel", this);
     m_lineSaveDir = new QLineEdit(this);
     m_lineSaveDir->setText(AppSettings::get().value("save_dir").toString());
     m_lineSaveDir->setPlaceholderText("Leave blank to save next to original file");
@@ -105,39 +105,85 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent) {
     dirLayout->addWidget(m_lineSaveDir);
     dirLayout->addWidget(m_btnBrowseSaveDir);
 
-    QFormLayout* formLayout = new QFormLayout();
-    formLayout->addRow("Default Save Folder:", dirLayout);
-    formLayout->addRow("Output Resolution:", m_comboResolution); 
-    formLayout->addRow("Output FPS:", m_spinFps);
-    formLayout->addRow("Playback Speed:", m_spinSpeed);
-    formLayout->addRow(m_chkMaxSize, m_spinMaxSize);
-    formLayout->addRow(new QLabel(""), new QLabel("")); // Spacer
-    formLayout->addRow("Set Start Marker:", m_btnStart);
-    formLayout->addRow("Set End Marker:", m_btnEnd);
-    formLayout->addRow("Play / Pause:", m_btnPlay);
-    formLayout->addRow("Skip Back 5s:", m_btnRewind);
-    formLayout->addRow("Skip Forward 5s:", m_btnForward);
-    formLayout->addRow("Render Slices:", m_btnRender);
-    formLayout->addRow("Cancel Workspace:", m_btnCancel);
+    videoLayout->addRow("Default Save Folder:", dirLayout);
+    videoLayout->addRow("Output Resolution:", m_comboResolution);
+    videoLayout->addRow("Output FPS:", m_spinFps);
+    videoLayout->addRow("UI Playback Speed:", m_spinPlaybackSpeed);
+    videoLayout->addRow("Final Render Speed:", m_spinRenderSpeed);
+    videoLayout->addRow(m_chkMaxSize, m_spinMaxSize);
+
+    // --- MAIN WINDOW BINDS TAB ---
+    QWidget* tabMainBinds = new QWidget();
+    QFormLayout* mainBindsLayout = new QFormLayout(tabMainBinds);
+
+    // Inside your SettingsDialog constructor, under the Main Binds Tab:
+
+    m_btnNavLeft = new KeybindButton("key_nav_left", this);
+    m_btnNavDown = new KeybindButton("key_nav_down", this);
+    m_btnNavUp = new KeybindButton("key_nav_up", this);
+    m_btnNavRight = new KeybindButton("key_nav_right", this);
+
+    mainBindsLayout->addRow(new QLabel("<i>Vim Navigation (H J K L):</i>"));
+    mainBindsLayout->addRow("Left:", m_btnNavLeft);
+    mainBindsLayout->addRow("Down:", m_btnNavDown);
+    mainBindsLayout->addRow("Up:", m_btnNavUp);
+    mainBindsLayout->addRow("Right:", m_btnNavRight);
+
+    mainBindsLayout->addRow(new QLabel("<i>Note: Arrow keys also work for navigation.</i>"));
+    mainBindsLayout->addRow("Previous Page:", m_btnNavLeft);
+    mainBindsLayout->addRow("Previous Page:", m_btnNavRight);
+    mainBindsLayout->addRow("Previous Page:", m_btnNavUp);
+    mainBindsLayout->addRow("Previous Page:", m_btnNavDown);
+
+    // --- TRIMMER BINDS TAB ---
+    QWidget* tabTrimmerBinds = new QWidget();
+    QFormLayout* trimmerLayout = new QFormLayout(tabTrimmerBinds);
+
+    m_btnStart = new KeybindButton("key_start", this);
+    m_btnEnd = new KeybindButton("key_end", this);
+    m_btnPlay = new KeybindButton("key_play", this);
+    m_btnRewind = new KeybindButton("key_rewind", this);
+    m_btnForward = new KeybindButton("key_forward", this);
+    m_btnRender = new KeybindButton("key_render", this);
+    m_btnCancel = new KeybindButton("key_cancel", this);
+
+    trimmerLayout->addRow("Set Start Marker:", m_btnStart);
+    trimmerLayout->addRow("Set End Marker:", m_btnEnd);
+    trimmerLayout->addRow("Play / Pause:", m_btnPlay);
+    trimmerLayout->addRow("Skip Back 5s:", m_btnRewind);
+    trimmerLayout->addRow("Skip Forward 5s:", m_btnForward);
+    trimmerLayout->addRow("Render Slices:", m_btnRender);
+    trimmerLayout->addRow("Cancel Workspace:", m_btnCancel);
+
+    // --- ASSEMBLE TABS ---
+    QTabWidget* tabWidget = new QTabWidget(this);
+    tabWidget->addTab(tabVideo, "Video & Output");
+    tabWidget->addTab(tabMainBinds, "Main Binds");
+    tabWidget->addTab(tabTrimmerBinds, "Trimmer Binds");
 
     QPushButton* btnSave = new QPushButton("Save Preferences", this);
     btnSave->setStyleSheet("background-color: #2196F3; color: white; padding: 8px; font-weight: bold;");
     connect(btnSave, &QPushButton::clicked, this, &SettingsDialog::onSaveClicked);
 
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
-    mainLayout->addLayout(formLayout);
-    mainLayout->addStretch();
+    mainLayout->addWidget(tabWidget);
     mainLayout->addWidget(btnSave);
 }
 
 void SettingsDialog::onSaveClicked() {
     auto& settings = AppSettings::get();
     settings.setValue("fps", m_spinFps->value());
-    settings.setValue("speed", m_spinSpeed->value());
+    settings.setValue("playback_speed", m_spinPlaybackSpeed->value());
+    settings.setValue("render_speed", m_spinRenderSpeed->value());
     settings.setValue("limit_size", m_chkMaxSize->isChecked());
     settings.setValue("max_size_mb", m_spinMaxSize->value());
     settings.setValue("resolution", m_comboResolution->currentData().toInt());
     settings.setValue("save_dir", m_lineSaveDir->text());
+
+    settings.setValue("key_nav_left", m_btnNavLeft->currentKey());
+    settings.setValue("key_nav_down", m_btnNavDown->currentKey());
+    settings.setValue("key_nav_up", m_btnNavUp->currentKey());
+    settings.setValue("key_nav_right", m_btnNavRight->currentKey());
 
     settings.setValue("key_start", m_btnStart->currentKey());
     settings.setValue("key_end", m_btnEnd->currentKey());
@@ -148,15 +194,4 @@ void SettingsDialog::onSaveClicked() {
     settings.setValue("key_cancel", m_btnCancel->currentKey());
 
     accept();
-}
-
-void SettingsDialog::onBrowseSaveDirClicked() {
-    QString currentDir = m_lineSaveDir->text().isEmpty() ? "C:/" : m_lineSaveDir->text();
-
-    QString dir = QFileDialog::getExistingDirectory(this, "Select Default Save Directory",
-        currentDir, QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
-
-    if (!dir.isEmpty()) {
-        m_lineSaveDir->setText(QDir::toNativeSeparators(dir));
-    }
 }
