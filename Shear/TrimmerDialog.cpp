@@ -371,18 +371,20 @@ void TrimmerDialog::triggerRender() {
 
     msgBox.exec();
 
-    // Route the user's choice
     if (msgBox.clickedButton() == btnOpenFolder) {
         QDesktopServices::openUrl(QUrl::fromLocalFile(targetDir));
     }
     else if (msgBox.clickedButton() == btnDeleteOrig) {
-        // THE SAFETY CATCH
         QMessageBox::StandardButton reply;
         reply = QMessageBox::warning(this, "Permanent Delete",
             "Are you absolutely sure you want to delete the original raw footage?\n\nThis bypasses the Recycle Bin and CANNOT be undone.",
             QMessageBox::Yes | QMessageBox::No);
 
         if (reply == QMessageBox::Yes) {
+			// Release the file lock
+			m_player->stop();
+			m_player->setSource(QUrl());
+
             if (QFile::remove(m_videoPath)) {
                 QMessageBox::information(this, "Deleted", "Original file removed.");
             }
