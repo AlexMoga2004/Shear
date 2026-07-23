@@ -56,9 +56,6 @@ public:
     TrimmerDialog(const QString& videoPath, const QString& baseScanDir, QWidget* parent = nullptr);
     ~TrimmerDialog();
 
-protected:
-    void keyPressEvent(QKeyEvent* event) override;
-
 private slots:
     void onPositionChanged(qint64 position);
     void onDurationChanged(qint64 duration);

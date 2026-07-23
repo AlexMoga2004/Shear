@@ -271,7 +271,7 @@ void Shear::onVideoDoubleClicked(QListWidgetItem* item)
 
 void Shear::keyPressEvent(QKeyEvent* event)
 {
-    // GUARD: If the user is typing a folder path, let normal typing happen
+    // If the user is typing a folder location, don't intercept the keys
     if (ui.linePath->hasFocus()) {
         QMainWindow::keyPressEvent(event);
         return;

@@ -18,6 +18,9 @@
 #include <QClipboard>
 #include <QMimeData>
 
+#include <QShortcut>
+#include <QKeySequence>
+
 TrimmerDialog::TrimmerDialog(const QString& videoPath, const QString &baseScanDir, QWidget* parent)
     : QDialog(parent), m_videoPath(videoPath), m_baseScanDir(baseScanDir)
 {
@@ -39,14 +42,51 @@ TrimmerDialog::TrimmerDialog(const QString& videoPath, const QString &baseScanDi
     m_btnRender = new QPushButton("RENDER (Enter)", this);
     m_btnCancel = new QPushButton("CANCEL (Backspace)", this);
 
-    m_timelineSlider->setFocusPolicy(Qt::NoFocus);
-    m_videoWidget->setFocusPolicy(Qt::NoFocus);
-    m_btnRender->setFocusPolicy(Qt::NoFocus);
-    m_btnCancel->setFocusPolicy(Qt::NoFocus);
-
     m_lblMarkers->setStyleSheet("font-weight: bold; color: #4CAF50; font-size: 14px;");
 
     m_player->setPlaybackRate(AppSettings::get().value("speed", 1.0).toDouble());
+
+    auto& settings = AppSettings::get();
+
+    // Setup keyboard shortcuts within the trimmer dialogue window
+
+    // Start Marker
+    QShortcut* cutStart = new QShortcut(QKeySequence(settings.value("key_start").toInt()), this);
+    connect(cutStart, &QShortcut::activated, this, &TrimmerDialog::setStartMarker);
+
+    // End Marker
+    QShortcut* cutEnd = new QShortcut(QKeySequence(settings.value("key_end").toInt()), this);
+    connect(cutEnd, &QShortcut::activated, this, &TrimmerDialog::setEndMarker);
+
+    // Play / Pause
+    QShortcut* cutPlay = new QShortcut(QKeySequence(settings.value("key_play").toInt()), this);
+    connect(cutPlay, &QShortcut::activated, this, &TrimmerDialog::togglePlayPause);
+
+    // Rewind 
+    auto rewindFunc = [this]() {
+        m_player->setPosition(qMax(0LL, m_player->position() - 5000));
+        };
+    QShortcut* cutRewind = new QShortcut(QKeySequence(settings.value("key_rewind").toInt()), this);
+    QShortcut* cutRewindAlt = new QShortcut(QKeySequence(Qt::Key_Left), this);
+    connect(cutRewind, &QShortcut::activated, this, rewindFunc);
+    connect(cutRewindAlt, &QShortcut::activated, this, rewindFunc);
+
+    // Forward 
+    auto forwardFunc = [this]() {
+        m_player->setPosition(qMin(m_totalDuration, m_player->position() + 5000));
+        };
+    QShortcut* cutForward = new QShortcut(QKeySequence(settings.value("key_forward").toInt()), this);
+    QShortcut* cutForwardAlt = new QShortcut(QKeySequence(Qt::Key_Right), this);
+    connect(cutForward, &QShortcut::activated, this, forwardFunc);
+    connect(cutForwardAlt, &QShortcut::activated, this, forwardFunc);
+
+    // Render
+    QShortcut* cutRender = new QShortcut(QKeySequence(settings.value("key_render").toInt()), this);
+    connect(cutRender, &QShortcut::activated, this, &TrimmerDialog::triggerRender);
+
+    // Cancel
+    QShortcut* cutCancel = new QShortcut(QKeySequence(settings.value("key_cancel").toInt()), this);
+    connect(cutCancel, &QShortcut::activated, this, &TrimmerDialog::reject);
 
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
 
@@ -353,40 +393,4 @@ void TrimmerDialog::triggerRender() {
     }
 
     accept();
-}
-
-void TrimmerDialog::keyPressEvent(QKeyEvent* event)
-{
-    int key = event->key();
-    auto& settings = AppSettings::get();
-
-    qint64 currentPos = m_player->position();
-    qint64 newPos = currentPos;
-
-    if (key == settings.value("key_start").toInt()) {
-        setStartMarker();
-    }
-    else if (key == settings.value("key_end").toInt()) {
-        setEndMarker();
-    }
-    else if (key == settings.value("key_play").toInt()) {
-        togglePlayPause();
-    }
-    else if (key == settings.value("key_rewind").toInt() || key == Qt::Key_Left) {
-        newPos = qMax(0LL, currentPos - 5000);
-        m_player->setPosition(newPos);
-    }
-    else if (key == settings.value("key_forward").toInt() || key == Qt::Key_Right) {
-        newPos = qMin(m_totalDuration, currentPos + 5000);
-        m_player->setPosition(newPos);
-    }
-    else if (key == settings.value("key_render").toInt()) {
-        triggerRender();
-    }
-    else if (key == settings.value("key_cancel").toInt()) {
-        reject();
-    }
-    else {
-        QDialog::keyPressEvent(event);
-    }
 }
