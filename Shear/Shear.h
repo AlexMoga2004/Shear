@@ -4,6 +4,7 @@
 #include <QCloseEvent>
 #include <QStringList>
 #include <QPixmap>
+#include <QShortcut>
 #include <QDir> 
 #include "ui_Shear.h"
 
@@ -17,8 +18,12 @@ public:
 
 protected:
     void closeEvent(QCloseEvent* event) override;
-    void keyPressEvent(QKeyEvent* event) override;
     bool eventFilter(QObject* obj, QEvent* event) override;
+
+private:
+    QShortcut* m_shortcutRefresh;
+    QShortcut* m_shortcutPrev;
+    QShortcut* m_shortcutNext;
 
 private slots:
     void onBrowseClicked();

@@ -46,7 +46,35 @@ Shear::Shear(QWidget* parent)
         }
         });
 
-    ui.listThumbnails->installEventFilter(this);
+    // Intercept focus events on the text box so we don't break typing
+    ui.linePath->installEventFilter(this);
+
+    // -- Global Window Shortcuts --
+    m_shortcutRefresh = new QShortcut(QKeySequence(Qt::Key_R), this);
+    connect(m_shortcutRefresh, &QShortcut::activated, this, &Shear::onRefreshClicked);
+
+    m_shortcutPrev = new QShortcut(QKeySequence(Qt::Key_Comma), this);
+    connect(m_shortcutPrev, &QShortcut::activated, ui.btnPrev, &QPushButton::click);
+
+    m_shortcutNext = new QShortcut(QKeySequence(Qt::Key_Period), this);
+    connect(m_shortcutNext, &QShortcut::activated, ui.btnNext, &QPushButton::click);
+
+    // -- List-Specific Shortcuts --
+    // Qt::WidgetShortcut context means these ONLY trigger when the thumbnail list has focus.
+    // This leaves the Enter key free to trigger UI buttons or the linePath text box.
+    QShortcut* cutEnter = new QShortcut(QKeySequence(Qt::Key_Enter), ui.listThumbnails, nullptr, nullptr, Qt::WidgetShortcut);
+    QShortcut* cutReturn = new QShortcut(QKeySequence(Qt::Key_Return), ui.listThumbnails, nullptr, nullptr, Qt::WidgetShortcut);
+    QShortcut* cutSpace = new QShortcut(QKeySequence(Qt::Key_Space), ui.listThumbnails, nullptr, nullptr, Qt::WidgetShortcut);
+
+    auto openCurrentVideo = [this]() {
+        if (QListWidgetItem* current = ui.listThumbnails->currentItem()) {
+            onVideoDoubleClicked(current);
+        }
+	};
+
+    connect(cutEnter, &QShortcut::activated, this, openCurrentVideo);
+    connect(cutReturn, &QShortcut::activated, this, openCurrentVideo);
+    connect(cutSpace, &QShortcut::activated, this, openCurrentVideo);
 
     loadSettings();
 }
@@ -269,62 +297,19 @@ void Shear::onVideoDoubleClicked(QListWidgetItem* item)
     trimmer.exec();
 }
 
-void Shear::keyPressEvent(QKeyEvent* event)
-{
-    // If the user is typing a folder location, don't intercept the keys
-    if (ui.linePath->hasFocus()) {
-        QMainWindow::keyPressEvent(event);
-        return;
-    }
-
-    switch (event->key()) {
-    case Qt::Key_Return:
-    case Qt::Key_Space:
-    case Qt::Key_Enter: {
-        if (ui.listThumbnails->hasFocus()) {
-            QListWidgetItem* current = ui.listThumbnails->currentItem();
-            if (current) {
-                onVideoDoubleClicked(current);
-            }
-        }
-        break;
-    }
-
-    case Qt::Key_R: {
-        onRefreshClicked();
-        break;
-    }
-
-    case Qt::Key_Comma: { 
-        if (ui.btnPrev->isEnabled()) {
-            ui.btnPrev->click();
-        }
-        break;
-    }
-    case Qt::Key_Period: { 
-        if (ui.btnNext->isEnabled()) {
-            ui.btnNext->click();
-        }
-        break;
-    }
-
-    default:
-        QMainWindow::keyPressEvent(event);
-    }
-}
-
 bool Shear::eventFilter(QObject* obj, QEvent* event)
 {
-    if (obj == ui.listThumbnails && event->type() == QEvent::KeyPress) {
-
-        QKeyEvent* keyEvent = static_cast<QKeyEvent*>(event);
-        int key = keyEvent->key();
-
-        if (key == Qt::Key_R || key == Qt::Key_Comma || key == Qt::Key_Period) {
-
-            keyPressEvent(keyEvent);
-
-            return true;
+    // Toggle single-character shortcuts off when typing in the directory box
+    if (obj == ui.linePath) {
+        if (event->type() == QEvent::FocusIn) {
+            m_shortcutRefresh->setEnabled(false);
+            m_shortcutPrev->setEnabled(false);
+            m_shortcutNext->setEnabled(false);
+        }
+        else if (event->type() == QEvent::FocusOut) {
+            m_shortcutRefresh->setEnabled(true);
+            m_shortcutPrev->setEnabled(true);
+            m_shortcutNext->setEnabled(true);
         }
     }
 
