@@ -4,7 +4,7 @@
 #include <QHBoxLayout>
 #include <QTime>
 #include <QDateTime>
-#include<Qt>
+#include <Qt>
 #include <QMessageBox>
 
 #include <QProcess>
@@ -21,7 +21,7 @@
 #include <QShortcut>
 #include <QKeySequence>
 
-TrimmerDialog::TrimmerDialog(const QString& videoPath, const QString &baseScanDir, QWidget* parent)
+TrimmerDialog::TrimmerDialog(const QString& videoPath, const QString& baseScanDir, QWidget* parent)
     : QDialog(parent), m_videoPath(videoPath), m_baseScanDir(baseScanDir)
 {
     setWindowTitle("Trim Workspace - " + videoPath);
@@ -42,14 +42,19 @@ TrimmerDialog::TrimmerDialog(const QString& videoPath, const QString &baseScanDi
     m_btnRender = new QPushButton("RENDER (Enter)", this);
     m_btnCancel = new QPushButton("CANCEL (Backspace)", this);
 
-    m_btnRewindUI = new QPushButton("⏪ -5s", this);
-    m_btnPlayUI = new QPushButton("▶ / ⏸", this);
-    m_btnForwardUI = new QPushButton("+5s ⏩", this);
+    // Playback and Marker Snapping Buttons
+    m_btnRewind = new QPushButton("⏪ -5s", this);
+    m_btnPlay = new QPushButton("▶ / ⏸", this);
+    m_btnForward = new QPushButton("+5s ⏩", this);
+    m_btnSetStartHere = new QPushButton("📍 Set Start Here", this);
+    m_btnSetEndHere = new QPushButton("📍 Set End Here", this);
 
-    QString ctrlStyle = "QPushButton { padding: 4px 8px; font-weight: bold; }";
-    m_btnRewindUI->setStyleSheet(ctrlStyle);
-    m_btnPlayUI->setStyleSheet(ctrlStyle);
-    m_btnForwardUI->setStyleSheet(ctrlStyle);
+    QString ctrlStyle = "QPushButton { padding: 6px 12px; font-weight: bold; }";
+    m_btnRewind->setStyleSheet(ctrlStyle);
+    m_btnPlay->setStyleSheet(ctrlStyle);
+    m_btnForward->setStyleSheet(ctrlStyle);
+    m_btnSetStartHere->setStyleSheet(ctrlStyle + " QPushButton { color: green; }");
+    m_btnSetEndHere->setStyleSheet(ctrlStyle + " QPushButton { color: red; }");
 
     m_lblMarkers->setStyleSheet("font-weight: bold; color: #4CAF50; font-size: 14px;");
 
@@ -97,29 +102,27 @@ TrimmerDialog::TrimmerDialog(const QString& videoPath, const QString &baseScanDi
     QShortcut* cutCancel = new QShortcut(QKeySequence(settings.value("key_cancel").toInt()), this);
     connect(cutCancel, &QShortcut::activated, this, &TrimmerDialog::reject);
 
+    // --- Layout Building ---
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
 
     mainLayout->addWidget(m_videoWidget, 1);
 
-    connect(m_btnRewindUI, &QPushButton::clicked, this, [this]() {
-        m_player->setPosition(qMax(0LL, m_player->position() - 5000));
-        });
-    connect(m_btnPlayUI, &QPushButton::clicked, this, &TrimmerDialog::togglePlayPause);
-    connect(m_btnForwardUI, &QPushButton::clicked, this, [this]() {
-        m_player->setPosition(qMin(m_totalDuration, m_player->position() + 5000));
-        });
-
-
-
+    // Timeline row: Current Time -> Timeline Slider -> Duration
     QHBoxLayout* timelineLayout = new QHBoxLayout();
     timelineLayout->addWidget(m_lblCurrentTime);
-    timelineLayout->addWidget(m_btnRewindUI);
-    timelineLayout->addWidget(m_btnPlayUI);
-    timelineLayout->addWidget(m_btnForwardUI);
     timelineLayout->addWidget(m_timelineSlider, 1);
-    timelineLayout->addWidget(m_lblDuration);    
-    
+    timelineLayout->addWidget(m_lblDuration);
     mainLayout->addLayout(timelineLayout);
+
+    // Control panel row underneath the timeline: Playback controls + Snapping buttons
+    QHBoxLayout* controlRowLayout = new QHBoxLayout();
+    controlRowLayout->addWidget(m_btnRewind);
+    controlRowLayout->addWidget(m_btnPlay);
+    controlRowLayout->addWidget(m_btnForward);
+    controlRowLayout->addStretch();
+    controlRowLayout->addWidget(m_btnSetStartHere);
+    controlRowLayout->addWidget(m_btnSetEndHere);
+    mainLayout->addLayout(controlRowLayout);
 
     mainLayout->addWidget(m_lblMarkers, 0, Qt::AlignCenter);
 
@@ -127,6 +130,31 @@ TrimmerDialog::TrimmerDialog(const QString& videoPath, const QString &baseScanDi
     buttonLayout->addWidget(m_btnRender);
     buttonLayout->addWidget(m_btnCancel);
     mainLayout->addLayout(buttonLayout);
+
+    // --- Signal Connections ---
+    connect(m_btnRewind, &QPushButton::clicked, this, [this]() {
+        m_player->setPosition(qMax(0LL, m_player->position() - 5000));
+        });
+    connect(m_btnPlay, &QPushButton::clicked, this, &TrimmerDialog::togglePlayPause);
+    connect(m_btnForward, &QPushButton::clicked, this, [this]() {
+        m_player->setPosition(qMin(m_totalDuration, m_player->position() + 5000));
+        });
+
+    connect(m_btnSetStartHere, &QPushButton::clicked, this, [this]() {
+        qint64 currentPos = m_player->position();
+        if (currentPos < m_endTime) {
+            m_startTime = currentPos;
+            updateMarkerLabel();
+        }
+        });
+
+    connect(m_btnSetEndHere, &QPushButton::clicked, this, [this]() {
+        qint64 currentPos = m_player->position();
+        if (currentPos > m_startTime) {
+            m_endTime = currentPos;
+            updateMarkerLabel();
+        }
+        });
 
     connect(m_player, &QMediaPlayer::positionChanged, this, &TrimmerDialog::onPositionChanged);
     connect(m_player, &QMediaPlayer::durationChanged, this, &TrimmerDialog::onDurationChanged);
@@ -147,7 +175,7 @@ void TrimmerDialog::onDurationChanged(qint64 duration) {
     m_totalDuration = duration;
     m_timelineSlider->setRange(0, duration);
     m_lblDuration->setText(formatTime(duration));
-    m_endTime = duration; 
+    m_endTime = duration;
     updateMarkerLabel();
 }
 
@@ -227,7 +255,6 @@ void TrimmerDialog::triggerRender() {
     QString originalDir = inputInfo.absolutePath();
     QString baseName = inputInfo.completeBaseName();
 
-    // Calculate the exact folder tree between your search start point and the video
     QDir baseDir(m_baseScanDir);
     QString relativeFolderTree = baseDir.relativeFilePath(originalDir);
 
@@ -235,8 +262,6 @@ void TrimmerDialog::triggerRender() {
     QString targetDir = originalDir;
 
     if (!customSaveDir.isEmpty() && QDir(customSaveDir).exists()) {
-        // If relativeFolderTree is ".", it means Depth was 0 (the video is directly in the base folder).
-        // We check for "." so we don't accidentally create weird paths like "D:/Clips/."
         if (relativeFolderTree == ".") {
             targetDir = customSaveDir;
         }
@@ -247,7 +272,6 @@ void TrimmerDialog::triggerRender() {
         QDir().mkpath(targetDir);
     }
 
-    // --- SMART & SAFE FILENAME ---
     QString outPath;
     QString timeStamp = QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss");
 
@@ -255,7 +279,7 @@ void TrimmerDialog::triggerRender() {
         outPath = targetDir + "/" + baseName + "_trimmed_" + timeStamp + ".mp4";
     }
     else {
-        outPath = targetDir + "/" + baseName + ".mp4"; // Original name preserved
+        outPath = targetDir + "/" + baseName + ".mp4";
     }
 
     QString passLogPrefix = targetDir + "/ffmpeg_2pass_log";
@@ -263,7 +287,7 @@ void TrimmerDialog::triggerRender() {
     QString ffmpegExe = QDir(appDir).filePath("bin/ffmpeg/win/ffmpeg.exe");
     if (!QFileInfo::exists(ffmpegExe)) ffmpegExe = "ffmpeg";
 
-    // 3. Build the Base FFmpeg Arguments & Filters
+    // 3. Build Base FFmpeg Arguments & Filters
     QStringList baseArgs;
     baseArgs << "-y"
         << "-ss" << QString::number(startSec, 'f', 3)
@@ -275,14 +299,12 @@ void TrimmerDialog::triggerRender() {
     if (fps > 0) vf << QString("fps=%1").arg(fps);
     if (speed != 1.0) vf << QString("setpts=%1*PTS").arg(1.0 / speed);
 
-    // SCALE DOWN RESOLUTION (Uses -2 to ensure width is an even number, required by MP4)
     if (resolution > 0) {
         vf << QString("scale=-2:%1").arg(resolution);
     }
 
     if (!vf.isEmpty()) filterArgs << "-vf" << vf.join(",");
     if (speed != 1.0) filterArgs << "-af" << QString("atempo=%1").arg(speed);
-
 
     // 4. Calculate Bitrate Target with a 5% Safety Margin
     int videoBitrateK = 0;
@@ -292,13 +314,12 @@ void TrimmerDialog::triggerRender() {
         videoBitrateK = qMax(50, (int)(totalKbps - 128));
     }
 
-    // 5. Setup the Indeterminate Loading UI (Range 0, 0 makes it bounce)
+    // 5. Setup Indeterminate Loading UI
     QProgressDialog progress("Rendering Video...", "Cancel", 0, 0, this);
     progress.setWindowModality(Qt::WindowModal);
     progress.setAutoClose(true);
     progress.show();
 
-    // Clean Process Runner
     auto runProcess = [&](const QStringList& args) -> bool {
         QProcess p;
         p.start(ffmpegExe, args);
@@ -333,7 +354,6 @@ void TrimmerDialog::triggerRender() {
 
             progress.setLabelText(QString("Analyzing Video (Attempt %1)...").arg(attempts));
 
-            // CLEAN REBUILD of arguments for Pass 1
             QStringList pass1Args = baseArgs + filterArgs;
             pass1Args << "-c:v" << "libx264" << "-b:v" << QString("%1k").arg(videoBitrateK)
                 << "-pass" << "1" << "-passlogfile" << passLogPrefix
@@ -343,28 +363,26 @@ void TrimmerDialog::triggerRender() {
 
             progress.setLabelText(QString("Writing Final Data (Attempt %1)...").arg(attempts));
 
-            // CLEAN REBUILD of arguments for Pass 2
             QStringList pass2Args = baseArgs + filterArgs;
             pass2Args << "-c:v" << "libx264"
                 << "-b:v" << QString("%1k").arg(videoBitrateK)
-                << "-maxrate" << QString("%1k").arg(videoBitrateK)      // Hard cap
-                << "-bufsize" << QString("%1k").arg(videoBitrateK * 2)  // Enforce cap
+                << "-maxrate" << QString("%1k").arg(videoBitrateK)
+                << "-bufsize" << QString("%1k").arg(videoBitrateK * 2)
                 << "-pass" << "2" << "-passlogfile" << passLogPrefix
                 << "-c:a" << "aac" << "-b:a" << "128k"
                 << outPath;
 
             if (!runProcess(pass2Args)) return;
 
-            // 7. Post-Render Size Audit
-            QFile finalFile(outPath); 
+            QFile finalFile(outPath);
             double actualMB = finalFile.size() / (1024.0 * 1024.0);
 
             if (actualMB <= maxSizeMB) {
-                fileIsTooBig = false; 
+                fileIsTooBig = false;
             }
             else {
                 progress.setLabelText("Limit exceeded. Re-compressing...");
-                videoBitrateK = (int)(videoBitrateK * 0.80); // Drop bitrate by 20%
+                videoBitrateK = (int)(videoBitrateK * 0.80);
             }
         }
 
@@ -377,7 +395,7 @@ void TrimmerDialog::triggerRender() {
         QFile::remove(passLogPrefix + "-0.log.mbtree");
     }
 
-    // 7. Success! Open the folder
+    // 7. Success
     progress.close();
 
     QMimeData* mimeData = new QMimeData();
@@ -404,9 +422,8 @@ void TrimmerDialog::triggerRender() {
             QMessageBox::Yes | QMessageBox::No);
 
         if (reply == QMessageBox::Yes) {
-			// Release the file lock
-			m_player->stop();
-			m_player->setSource(QUrl());
+            m_player->stop();
+            m_player->setSource(QUrl());
 
             if (QFile::remove(m_videoPath)) {
                 QMessageBox::information(this, "Deleted", "Original file removed.");
