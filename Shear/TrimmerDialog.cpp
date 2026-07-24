@@ -205,7 +205,10 @@ void TrimmerDialog::updateMarkerLabel() {
 }
 
 void TrimmerDialog::setStartMarker() {
-    m_startTime = m_player->position();
+    int paddingSec = AppSettings::get().value("start_padding_sec", 0).toInt();
+    qint64 paddedPos = m_player->position() - (paddingSec * 1000LL);
+    m_startTime = qMax(0LL, paddedPos);
+
     if (m_startTime > m_endTime) m_endTime = m_totalDuration;
     updateMarkerLabel();
 
@@ -213,7 +216,10 @@ void TrimmerDialog::setStartMarker() {
 }
 
 void TrimmerDialog::setEndMarker() {
-    m_endTime = m_player->position();
+    int paddingSec = AppSettings::get().value("end_padding_sec", 0).toInt();
+    qint64 paddedPos = m_player->position() + (paddingSec * 1000LL);
+    m_endTime = qMin(m_totalDuration, paddedPos);
+
     if (m_endTime < m_startTime) m_startTime = 0;
     updateMarkerLabel();
 }

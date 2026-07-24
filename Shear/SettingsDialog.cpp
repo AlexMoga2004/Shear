@@ -4,6 +4,14 @@
 #include <QKeySequence>
 #include <QLineEdit>
 #include <QFileDialog>
+#include <QSpinBox>
+#include <QDoubleSpinBox>
+#include <QCheckBox>
+#include <QComboBox>
+#include <QLabel>
+#include <QTabWidget>
+#include <QPushButton>
+#include <QDir>
 
 KeybindButton::KeybindButton(const QString& settingKey, QWidget* parent)
     : QPushButton(parent), m_settingKey(settingKey), m_isListening(false)
@@ -46,12 +54,12 @@ void KeybindButton::focusOutEvent(QFocusEvent* event) {
 
 void KeybindButton::updateText() {
     setText(QKeySequence(m_currentKey).toString());
-    setStyleSheet(""); 
+    setStyleSheet("");
 }
 
 SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent) {
     setWindowTitle("Preferences");
-    resize(400, 450); 
+    resize(400, 500);
 
     AppSettings::initDefaults();
 
@@ -105,19 +113,33 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent) {
     dirLayout->addWidget(m_lineSaveDir);
     dirLayout->addWidget(m_btnBrowseSaveDir);
 
+    // --- NEW PADDING CONTROLS ---
+    m_spinStartPadding = new QSpinBox(this);
+    m_spinStartPadding->setRange(0, 30);
+    m_spinStartPadding->setSuffix(" sec");
+    m_spinStartPadding->setValue(AppSettings::get().value("start_padding_sec", 0).toInt());
+
+    m_spinEndPadding = new QSpinBox(this);
+    m_spinEndPadding->setRange(0, 30);
+    m_spinEndPadding->setSuffix(" sec");
+    m_spinEndPadding->setValue(AppSettings::get().value("end_padding_sec", 0).toInt());
+
+    // Populate Video Tab layout
     videoLayout->addRow("Default Save Folder:", dirLayout);
     videoLayout->addRow("Output Resolution:", m_comboResolution);
     videoLayout->addRow("Output FPS:", m_spinFps);
     videoLayout->addRow("UI Playback Speed:", m_spinPlaybackSpeed);
     videoLayout->addRow("Final Render Speed:", m_spinRenderSpeed);
     videoLayout->addRow(m_chkMaxSize, m_spinMaxSize);
+    videoLayout->addRow(new QLabel(""), new QLabel("")); // Spacer row
+    videoLayout->addRow(new QLabel("<b>Marker Keybind Padding:</b>"));
+    videoLayout->addRow("Start Pre-roll (I):", m_spinStartPadding);
+    videoLayout->addRow("End Post-roll (O):", m_spinEndPadding);
 
-    // --- MAIN WINDOW BINDS TAB ---
     // --- MAIN WINDOW BINDS TAB ---
     QWidget* tabMainBinds = new QWidget();
     QFormLayout* mainBindsLayout = new QFormLayout(tabMainBinds);
 
-    // 1. Initialize all the buttons
     m_btnNavLeft = new KeybindButton("key_nav_left", this);
     m_btnNavDown = new KeybindButton("key_nav_down", this);
     m_btnNavUp = new KeybindButton("key_nav_up", this);
@@ -126,16 +148,13 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent) {
     m_btnMainPrev = new KeybindButton("key_prev_page", this);
     m_btnMainNext = new KeybindButton("key_next_page", this);
 
-    // 2. Add Vim Navigation Section
-    // (Passing a single QLabel to addRow makes it span both columns nicely)
     mainBindsLayout->addRow(new QLabel("<b>Vim Navigation (H J K L):</b>"));
     mainBindsLayout->addRow("Left:", m_btnNavLeft);
     mainBindsLayout->addRow("Down:", m_btnNavDown);
     mainBindsLayout->addRow("Up:", m_btnNavUp);
     mainBindsLayout->addRow("Right:", m_btnNavRight);
 
-    // 3. Add Page Navigation Section
-    mainBindsLayout->addRow(new QLabel(""), new QLabel("")); // Spacer row
+    mainBindsLayout->addRow(new QLabel(""), new QLabel(""));
     mainBindsLayout->addRow(new QLabel("<b>Page Navigation:</b>"));
     mainBindsLayout->addRow(new QLabel("<i>Note: Arrow keys also work for navigation.</i>"));
     mainBindsLayout->addRow("Previous Page:", m_btnMainPrev);
@@ -185,6 +204,10 @@ void SettingsDialog::onSaveClicked() {
     settings.setValue("max_size_mb", m_spinMaxSize->value());
     settings.setValue("resolution", m_comboResolution->currentData().toInt());
     settings.setValue("save_dir", m_lineSaveDir->text());
+
+    // Save padding values
+    settings.setValue("start_padding_sec", m_spinStartPadding->value());
+    settings.setValue("end_padding_sec", m_spinEndPadding->value());
 
     settings.setValue("key_nav_left", m_btnNavLeft->currentKey());
     settings.setValue("key_nav_down", m_btnNavDown->currentKey());

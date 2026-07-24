@@ -89,6 +89,8 @@ private:
     QLineEdit* m_lineSaveDir;
     QPushButton* m_btnBrowseSaveDir;
     QComboBox* m_comboResolution;
+    QSpinBox* m_spinStartPadding;
+    QSpinBox* m_spinEndPadding;
 
     KeybindButton* m_btnStart;
     KeybindButton* m_btnEnd;
