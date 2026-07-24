@@ -42,6 +42,15 @@ TrimmerDialog::TrimmerDialog(const QString& videoPath, const QString &baseScanDi
     m_btnRender = new QPushButton("RENDER (Enter)", this);
     m_btnCancel = new QPushButton("CANCEL (Backspace)", this);
 
+    m_btnRewindUI = new QPushButton("⏪ -5s", this);
+    m_btnPlayUI = new QPushButton("▶ / ⏸", this);
+    m_btnForwardUI = new QPushButton("+5s ⏩", this);
+
+    QString ctrlStyle = "QPushButton { padding: 4px 8px; font-weight: bold; }";
+    m_btnRewindUI->setStyleSheet(ctrlStyle);
+    m_btnPlayUI->setStyleSheet(ctrlStyle);
+    m_btnForwardUI->setStyleSheet(ctrlStyle);
+
     m_lblMarkers->setStyleSheet("font-weight: bold; color: #4CAF50; font-size: 14px;");
 
     m_player->setPlaybackRate(AppSettings::get().value("playback_speed", 1.0).toDouble());
@@ -92,10 +101,24 @@ TrimmerDialog::TrimmerDialog(const QString& videoPath, const QString &baseScanDi
 
     mainLayout->addWidget(m_videoWidget, 1);
 
+    connect(m_btnRewindUI, &QPushButton::clicked, this, [this]() {
+        m_player->setPosition(qMax(0LL, m_player->position() - 5000));
+        });
+    connect(m_btnPlayUI, &QPushButton::clicked, this, &TrimmerDialog::togglePlayPause);
+    connect(m_btnForwardUI, &QPushButton::clicked, this, [this]() {
+        m_player->setPosition(qMin(m_totalDuration, m_player->position() + 5000));
+        });
+
+
+
     QHBoxLayout* timelineLayout = new QHBoxLayout();
     timelineLayout->addWidget(m_lblCurrentTime);
-    timelineLayout->addWidget(m_timelineSlider);
-    timelineLayout->addWidget(m_lblDuration);
+    timelineLayout->addWidget(m_btnRewindUI);
+    timelineLayout->addWidget(m_btnPlayUI);
+    timelineLayout->addWidget(m_btnForwardUI);
+    timelineLayout->addWidget(m_timelineSlider, 1);
+    timelineLayout->addWidget(m_lblDuration);    
+    
     mainLayout->addLayout(timelineLayout);
 
     mainLayout->addWidget(m_lblMarkers, 0, Qt::AlignCenter);

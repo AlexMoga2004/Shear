@@ -37,6 +37,17 @@ public:
         if (!get().contains("key_forward")) get().setValue("key_forward", Qt::Key_L);
         if (!get().contains("key_render")) get().setValue("key_render", Qt::Key_Return);
         if (!get().contains("key_cancel")) get().setValue("key_cancel", Qt::Key_Backspace);
+
+        if (!get().contains("key_nav_left")) get().setValue("key_nav_left", Qt::Key_H);
+        if (!get().contains("key_nav_down")) get().setValue("key_nav_down", Qt::Key_J);
+        if (!get().contains("key_nav_up")) get().setValue("key_nav_up", Qt::Key_K);
+        if (!get().contains("key_nav_right")) get().setValue("key_nav_right", Qt::Key_L);
+
+        if (!get().contains("key_prev_page")) get().setValue("key_prev_page", Qt::Key_Comma);
+        if (!get().contains("key_next_page")) get().setValue("key_next_page", Qt::Key_Period);
+
+        if (!get().contains("key_prev_page")) get().setValue("key_prev_page", Qt::Key_Comma);
+        if (!get().contains("key_next_page")) get().setValue("key_next_page", Qt::Key_Period);
     }
 };
 
@@ -90,5 +101,7 @@ private:
     KeybindButton* m_btnNavRight;
     KeybindButton* m_btnNavUp;
     KeybindButton* m_btnNavDown;
+    KeybindButton* m_btnMainPrev;
+    KeybindButton* m_btnMainNext;
 };
 

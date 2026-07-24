@@ -80,6 +80,9 @@ private:
 
     QPushButton* m_btnRender;
     QPushButton* m_btnCancel;
+	QPushButton* m_btnRewindUI;
+    QPushButton* m_btnPlayUI;
+    QPushButton* m_btnForwardUI;
 
     qint64 m_startTime = 0;
     qint64 m_endTime = 0;

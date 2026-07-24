@@ -51,9 +51,9 @@ void KeybindButton::updateText() {
 
 SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent) {
     setWindowTitle("Preferences");
-    resize(400, 450); // Made slightly taller to accommodate tabs
+    resize(400, 450); 
 
-    AppSettings::initDefaults(); // Make sure to add "playback_speed", "render_speed", "key_prev_page" (Qt::Key_H), and "key_next_page" (Qt::Key_L) to this!
+    AppSettings::initDefaults();
 
     // --- VIDEO & OUTPUT TAB ---
     QWidget* tabVideo = new QWidget();
@@ -113,27 +113,33 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent) {
     videoLayout->addRow(m_chkMaxSize, m_spinMaxSize);
 
     // --- MAIN WINDOW BINDS TAB ---
+    // --- MAIN WINDOW BINDS TAB ---
     QWidget* tabMainBinds = new QWidget();
     QFormLayout* mainBindsLayout = new QFormLayout(tabMainBinds);
 
-    // Inside your SettingsDialog constructor, under the Main Binds Tab:
-
+    // 1. Initialize all the buttons
     m_btnNavLeft = new KeybindButton("key_nav_left", this);
     m_btnNavDown = new KeybindButton("key_nav_down", this);
     m_btnNavUp = new KeybindButton("key_nav_up", this);
     m_btnNavRight = new KeybindButton("key_nav_right", this);
 
-    mainBindsLayout->addRow(new QLabel("<i>Vim Navigation (H J K L):</i>"));
+    m_btnMainPrev = new KeybindButton("key_prev_page", this);
+    m_btnMainNext = new KeybindButton("key_next_page", this);
+
+    // 2. Add Vim Navigation Section
+    // (Passing a single QLabel to addRow makes it span both columns nicely)
+    mainBindsLayout->addRow(new QLabel("<b>Vim Navigation (H J K L):</b>"));
     mainBindsLayout->addRow("Left:", m_btnNavLeft);
     mainBindsLayout->addRow("Down:", m_btnNavDown);
     mainBindsLayout->addRow("Up:", m_btnNavUp);
     mainBindsLayout->addRow("Right:", m_btnNavRight);
 
+    // 3. Add Page Navigation Section
+    mainBindsLayout->addRow(new QLabel(""), new QLabel("")); // Spacer row
+    mainBindsLayout->addRow(new QLabel("<b>Page Navigation:</b>"));
     mainBindsLayout->addRow(new QLabel("<i>Note: Arrow keys also work for navigation.</i>"));
-    mainBindsLayout->addRow("Previous Page:", m_btnNavLeft);
-    mainBindsLayout->addRow("Previous Page:", m_btnNavRight);
-    mainBindsLayout->addRow("Previous Page:", m_btnNavUp);
-    mainBindsLayout->addRow("Previous Page:", m_btnNavDown);
+    mainBindsLayout->addRow("Previous Page:", m_btnMainPrev);
+    mainBindsLayout->addRow("Next Page:", m_btnMainNext);
 
     // --- TRIMMER BINDS TAB ---
     QWidget* tabTrimmerBinds = new QWidget();
@@ -194,4 +200,15 @@ void SettingsDialog::onSaveClicked() {
     settings.setValue("key_cancel", m_btnCancel->currentKey());
 
     accept();
+}
+
+void SettingsDialog::onBrowseSaveDirClicked() {
+    QString currentDir = m_lineSaveDir->text().isEmpty() ? "C:/" : m_lineSaveDir->text();
+
+    QString dir = QFileDialog::getExistingDirectory(this, "Select Default Save Directory",
+        currentDir, QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+
+    if (!dir.isEmpty()) {
+        m_lineSaveDir->setText(QDir::toNativeSeparators(dir));
+    }
 }

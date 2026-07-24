@@ -101,17 +101,6 @@ Shear::~Shear()
 {
 }
 
-void SettingsDialog::onBrowseSaveDirClicked() {
-    QString currentDir = m_lineSaveDir->text().isEmpty() ? "C:/" : m_lineSaveDir->text();
-
-    QString dir = QFileDialog::getExistingDirectory(this, "Select Default Save Directory",
-        currentDir, QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
-
-    if (!dir.isEmpty()) {
-        m_lineSaveDir->setText(QDir::toNativeSeparators(dir));
-    }
-}
-
 void Shear::onBrowseClicked()
 {
     QString startDir = ui.linePath->text().isEmpty() ? "C:/" : ui.linePath->text();
