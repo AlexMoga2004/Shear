@@ -212,7 +212,7 @@ void TrimmerDialog::setStartMarker() {
     if (m_startTime > m_endTime) m_endTime = m_totalDuration;
     updateMarkerLabel();
 
-    m_player->setPosition(m_startTime);
+    //m_player->setPosition(m_startTime);
 }
 
 void TrimmerDialog::setEndMarker() {
@@ -439,6 +439,5 @@ void TrimmerDialog::triggerRender() {
             }
         }
     }
-
     accept();
 }
