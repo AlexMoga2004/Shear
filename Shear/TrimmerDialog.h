@@ -11,6 +11,8 @@
 #include <QPainter>
 #include <QStyle>
 #include <TrimSlider.h>
+#include <QCheckBox>
+#include <QProgressDialog>
 
 class TrimmerDialog : public QDialog
 {
@@ -28,6 +30,7 @@ private slots:
     void setStartMarker();
     void setEndMarker();
     void triggerRender();
+    void setPresetLimit(int mb);
 
 private:
     QString m_videoPath;
@@ -53,6 +56,18 @@ private:
     qint64 m_startTime = 0;
     qint64 m_endTime = 0;
     qint64 m_totalDuration = 0;
+
+    QCheckBox* m_chkFastCut;
+    QPushButton* m_btnLimitNone;
+    QPushButton* m_btnLimit10;
+    QPushButton* m_btnLimit25;
+    QPushButton* m_btnLimit50;
+
+    int m_activeLimitMB = 0; 
+
+    bool runFastCut(const QString& ffmpegExe, double startSec, double durationSec, const QString& outPath, QProgressDialog& progress);
+    bool runSafeRender(const QString& ffmpegExe, double startSec, double originalDuration, double finalDuration, const QString& outPath, QProgressDialog& progress);
+    void updatePresetButtonStyles();
 
     QString formatTime(qint64 ms);
     void updateMarkerLabel();

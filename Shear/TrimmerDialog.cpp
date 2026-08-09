@@ -126,6 +126,40 @@ TrimmerDialog::TrimmerDialog(const QString& videoPath, const QString& baseScanDi
 
     mainLayout->addWidget(m_lblMarkers, 0, Qt::AlignCenter);
 
+    QHBoxLayout* presetLayout = new QHBoxLayout();
+
+    QLabel* lblPreset = new QLabel("Discord Preset:", this);
+    lblPreset->setStyleSheet("font-weight: bold;");
+
+    m_btnLimitNone = new QPushButton("Uncapped", this);
+    m_btnLimit10 = new QPushButton("10 MB", this);
+    m_btnLimit25 = new QPushButton("25 MB", this);
+    m_btnLimit50 = new QPushButton("50 MB", this);
+
+    m_chkFastCut = new QCheckBox("Prefer Fast Cut (-c copy)", this);
+    m_chkFastCut->setToolTip("Lossless instant trim without re-encoding. Automatically falls back to Safe Render if size exceeds target.");
+    m_chkFastCut->setChecked(true);
+
+    presetLayout->addWidget(lblPreset);
+    presetLayout->addWidget(m_btnLimitNone);
+    presetLayout->addWidget(m_btnLimit10);
+    presetLayout->addWidget(m_btnLimit25);
+    presetLayout->addWidget(m_btnLimit50);
+    presetLayout->addSpacing(15);
+    presetLayout->addWidget(m_chkFastCut);
+    presetLayout->addStretch();
+
+    bool limitEnabled = AppSettings::get().value("limit_size").toBool();
+    m_activeLimitMB = limitEnabled ? AppSettings::get().value("max_size_mb").toInt() : 0;
+    updatePresetButtonStyles();
+
+    connect(m_btnLimitNone, &QPushButton::clicked, this, [this]() { setPresetLimit(0); });
+    connect(m_btnLimit10, &QPushButton::clicked, this, [this]() { setPresetLimit(10); });
+    connect(m_btnLimit25, &QPushButton::clicked, this, [this]() { setPresetLimit(25); });
+    connect(m_btnLimit50, &QPushButton::clicked, this, [this]() { setPresetLimit(50); });
+
+    mainLayout->addLayout(presetLayout);
+
     QHBoxLayout* buttonLayout = new QHBoxLayout();
     buttonLayout->addWidget(m_btnRender);
     buttonLayout->addWidget(m_btnCancel);
@@ -239,10 +273,9 @@ void TrimmerDialog::togglePlayPause() {
 
 void TrimmerDialog::triggerRender() {
     auto& settings = AppSettings::get();
-    bool limitSize = settings.value("limit_size").toBool();
-    int maxSizeMB = settings.value("max_size_mb").toInt();
     int fps = settings.value("fps").toInt();
     double speed = settings.value("render_speed", 1.0).toDouble();
+    int resolution = settings.value("resolution").toInt();
 
     // 1. Calculate Timestamps
     double startSec = m_startTime / 1000.0;
@@ -254,9 +287,7 @@ void TrimmerDialog::triggerRender() {
         return;
     }
 
-    // 2. Setup File Paths & Nested Folders
-    int resolution = settings.value("resolution").toInt();
-
+    // 2. Setup File Paths & Folders
     QFileInfo inputInfo(m_videoPath);
     QString originalDir = inputInfo.absolutePath();
     QString baseName = inputInfo.completeBaseName();
@@ -274,143 +305,69 @@ void TrimmerDialog::triggerRender() {
         else {
             targetDir = customSaveDir + "/" + relativeFolderTree;
         }
-
         QDir().mkpath(targetDir);
     }
 
-    QString outPath;
     QString timeStamp = QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss");
+    QString outPath = (targetDir == originalDir)
+        ? QString("%1/%2_trimmed_%3.mp4").arg(targetDir, baseName, timeStamp)
+        : QString("%1/%2.mp4").arg(targetDir, baseName);
 
-    if (targetDir == originalDir) {
-        outPath = targetDir + "/" + baseName + "_trimmed_" + timeStamp + ".mp4";
-    }
-    else {
-        outPath = targetDir + "/" + baseName + ".mp4";
-    }
-
-    QString passLogPrefix = targetDir + "/ffmpeg_2pass_log";
-    QString appDir = QCoreApplication::applicationDirPath();
-    QString ffmpegExe = QDir(appDir).filePath("bin/ffmpeg/win/ffmpeg.exe");
+    QString ffmpegExe = QDir(QCoreApplication::applicationDirPath()).filePath("bin/ffmpeg/win/ffmpeg.exe");
     if (!QFileInfo::exists(ffmpegExe)) ffmpegExe = "ffmpeg";
 
-    // 3. Build Base FFmpeg Arguments & Filters
-    QStringList baseArgs;
-    baseArgs << "-y"
-        << "-ss" << QString::number(startSec, 'f', 3)
-        << "-i" << m_videoPath
-        << "-t" << QString::number(originalDuration, 'f', 3);
-
-    QStringList filterArgs;
-    QStringList vf;
-    if (fps > 0) vf << QString("fps=%1").arg(fps);
-    if (speed != 1.0) vf << QString("setpts=%1*PTS").arg(1.0 / speed);
-
-    if (resolution > 0) {
-        vf << QString("scale=-2:%1").arg(resolution);
-    }
-
-    if (!vf.isEmpty()) filterArgs << "-vf" << vf.join(",");
-    if (speed != 1.0) filterArgs << "-af" << QString("atempo=%1").arg(speed);
-
-    // 4. Calculate Bitrate Target with a 5% Safety Margin
-    int videoBitrateK = 0;
-    if (limitSize) {
-        double safeTargetMB = maxSizeMB * 0.95;
-        double totalKbps = (safeTargetMB * 8192.0) / finalDuration;
-        videoBitrateK = qMax(50, (int)(totalKbps - 128));
-    }
-
-    // 5. Setup Indeterminate Loading UI
-    QProgressDialog progress("Rendering Video...", "Cancel", 0, 0, this);
+    QProgressDialog progress("Preparing Render...", "Cancel", 0, 0, this);
     progress.setWindowModality(Qt::WindowModal);
-    progress.setAutoClose(true);
+    progress.setAutoClose(false);
     progress.show();
 
-    auto runProcess = [&](const QStringList& args) -> bool {
-        QProcess p;
-        p.start(ffmpegExe, args);
+    bool fastCutAllowed = m_chkFastCut->isChecked() && (speed == 1.0) && (resolution <= 0) && (fps <= 0);
+    bool renderSuccess = false;
 
-        while (!p.waitForFinished(100)) {
-            QCoreApplication::processEvents();
-            if (progress.wasCanceled()) {
-                p.kill();
-                return false;
-            }
-        }
-        return p.exitCode() == 0;
-        };
+    // --- PHASE 1: TRY FAST CUT (-c copy) ---
+    if (fastCutAllowed) {
+        progress.setLabelText("Attempting Instant Fast Cut (-c copy)...");
+        bool fastCutExecuted = runFastCut(ffmpegExe, startSec, originalDuration, outPath, progress);
 
-    // 6. Execution Block
-    if (!limitSize) {
-        progress.setLabelText("Rendering High Quality Cut...");
-        QStringList args = baseArgs + filterArgs;
-        args << "-c:v" << "libx264" << "-crf" << "18"
-            << "-c:a" << "aac" << "-b:a" << "128k"
-            << outPath;
+        if (fastCutExecuted && QFile::exists(outPath)) {
+            double actualMB = QFile(outPath).size() / (1024.0 * 1024.0);
 
-        if (!runProcess(args)) return;
-    }
-    else {
-        int attempts = 0;
-        bool fileIsTooBig = true;
-        const int MAX_ATTEMPTS = 3;
-
-        while (fileIsTooBig && attempts < MAX_ATTEMPTS) {
-            attempts++;
-
-            progress.setLabelText(QString("Analyzing Video (Attempt %1)...").arg(attempts));
-
-            QStringList pass1Args = baseArgs + filterArgs;
-            pass1Args << "-c:v" << "libx264" << "-b:v" << QString("%1k").arg(videoBitrateK)
-                << "-pass" << "1" << "-passlogfile" << passLogPrefix
-                << "-an" << "-f" << "mp4" << "NUL";
-
-            if (!runProcess(pass1Args)) return;
-
-            progress.setLabelText(QString("Writing Final Data (Attempt %1)...").arg(attempts));
-
-            QStringList pass2Args = baseArgs + filterArgs;
-            pass2Args << "-c:v" << "libx264"
-                << "-b:v" << QString("%1k").arg(videoBitrateK)
-                << "-maxrate" << QString("%1k").arg(videoBitrateK)
-                << "-bufsize" << QString("%1k").arg(videoBitrateK * 2)
-                << "-pass" << "2" << "-passlogfile" << passLogPrefix
-                << "-c:a" << "aac" << "-b:a" << "128k"
-                << outPath;
-
-            if (!runProcess(pass2Args)) return;
-
-            QFile finalFile(outPath);
-            double actualMB = finalFile.size() / (1024.0 * 1024.0);
-
-            if (actualMB <= maxSizeMB) {
-                fileIsTooBig = false;
+            // If no limit set OR file is within size budget -> Keep Fast Cut
+            if (m_activeLimitMB == 0 || actualMB <= m_activeLimitMB) {
+                renderSuccess = true;
             }
             else {
-                progress.setLabelText("Limit exceeded. Re-compressing...");
-                videoBitrateK = (int)(videoBitrateK * 0.80);
+                // Exceeded limit: discard fast cut file & fall back to Safe Render
+                QFile::remove(outPath);
+                progress.setLabelText(QString("Fast Cut was %1 MB (Exceeded %2 MB limit). Falling back to Safe Render...")
+                    .arg(actualMB, 0, 'f', 1).arg(m_activeLimitMB));
+                QCoreApplication::processEvents();
             }
         }
-
-        if (fileIsTooBig) {
-            QMessageBox::warning(this, "Size Limit Failed",
-                "Could not compress the file enough without destroying the video completely.\nTry a shorter clip.");
-        }
-
-        QFile::remove(passLogPrefix + "-0.log");
-        QFile::remove(passLogPrefix + "-0.log.mbtree");
     }
 
-    // 7. Success
+    // --- PHASE 2: SAFE RENDER (RE-ENCODE FALLBACK) ---
+    if (!renderSuccess && !progress.wasCanceled()) {
+        renderSuccess = runSafeRender(ffmpegExe, startSec, originalDuration, finalDuration, outPath, progress);
+    }
+
     progress.close();
 
+    if (!renderSuccess) {
+        if (!progress.wasCanceled()) {
+            QMessageBox::warning(this, "Render Failed", "Could not render video. Check settings or video source.");
+        }
+        return;
+    }
+
+    // --- PHASE 3: SUCCESS & CLIPBOARD ---
     QMimeData* mimeData = new QMimeData();
     mimeData->setUrls({ QUrl::fromLocalFile(outPath) });
     QGuiApplication::clipboard()->setMimeData(mimeData);
 
     QMessageBox msgBox(this);
     msgBox.setWindowTitle("Success");
-    msgBox.setText("Video rendered successfully!\n\nIt has been copied to your clipboard. You can paste it directly into Discord.");
+    msgBox.setText("Video rendered successfully!\n\nCopied to clipboard for instant pasting into Discord.");
 
     QPushButton* btnOpenFolder = msgBox.addButton("Open Folder", QMessageBox::ActionRole);
     QPushButton* btnDeleteOrig = msgBox.addButton("Delete Original", QMessageBox::DestructiveRole);
@@ -422,22 +379,150 @@ void TrimmerDialog::triggerRender() {
         QDesktopServices::openUrl(QUrl::fromLocalFile(targetDir));
     }
     else if (msgBox.clickedButton() == btnDeleteOrig) {
-        QMessageBox::StandardButton reply;
-        reply = QMessageBox::warning(this, "Permanent Delete",
-            "Are you absolutely sure you want to delete the original raw footage?\n\nThis bypasses the Recycle Bin and CANNOT be undone.",
-            QMessageBox::Yes | QMessageBox::No);
-
-        if (reply == QMessageBox::Yes) {
+        if (QMessageBox::warning(this, "Permanent Delete",
+            "Are you sure you want to delete raw footage?\nThis CANNOT be undone.",
+            QMessageBox::Yes | QMessageBox::No) == QMessageBox::Yes)
+        {
             m_player->stop();
             m_player->setSource(QUrl());
-
-            if (QFile::remove(m_videoPath)) {
-                QMessageBox::information(this, "Deleted", "Original file removed.");
-            }
-            else {
-                QMessageBox::critical(this, "Error", "Could not delete the file. It may be open in another program.");
-            }
+            QFile::remove(m_videoPath);
         }
     }
+
     accept();
+}
+
+void TrimmerDialog::setPresetLimit(int mb) {
+    m_activeLimitMB = mb;
+    updatePresetButtonStyles();
+}
+
+void TrimmerDialog::updatePresetButtonStyles() {
+    auto applyStyle = [](QPushButton* btn, bool active) {
+        if (active) {
+            btn->setStyleSheet("QPushButton { background-color: #4CAF50; color: white; font-weight: bold; padding: 4px 10px; }");
+        }
+        else {
+            btn->setStyleSheet("QPushButton { padding: 4px 10px; }");
+        }
+        };
+
+    applyStyle(m_btnLimitNone, m_activeLimitMB == 0);
+    applyStyle(m_btnLimit10, m_activeLimitMB == 10);
+    applyStyle(m_btnLimit25, m_activeLimitMB == 25);
+    applyStyle(m_btnLimit50, m_activeLimitMB == 50);
+}
+
+bool TrimmerDialog::runFastCut(const QString& ffmpegExe, double startSec, double durationSec, const QString& outPath, QProgressDialog& progress) {
+    QStringList args;
+    args << "-y"
+        << "-ss" << QString::number(startSec, 'f', 3)
+        << "-i" << m_videoPath
+        << "-t" << QString::number(durationSec, 'f', 3)
+        << "-c" << "copy"
+        << "-avoid_negative_ts" << "make_zero"
+        << outPath;
+
+    QProcess p;
+    p.start(ffmpegExe, args);
+
+    while (!p.waitForFinished(100)) {
+        QCoreApplication::processEvents();
+        if (progress.wasCanceled()) {
+            p.kill();
+            return false;
+        }
+    }
+
+    return p.exitCode() == 0;
+}
+
+bool TrimmerDialog::runSafeRender(const QString& ffmpegExe, double startSec, double originalDuration, double finalDuration, const QString& outPath, QProgressDialog& progress) {
+    auto& settings = AppSettings::get();
+    int fps = settings.value("fps").toInt();
+    double speed = settings.value("render_speed", 1.0).toDouble();
+    int resolution = settings.value("resolution").toInt();
+
+    QStringList baseArgs;
+    baseArgs << "-y"
+        << "-ss" << QString::number(startSec, 'f', 3)
+        << "-i" << m_videoPath
+        << "-t" << QString::number(originalDuration, 'f', 3);
+
+    QStringList filterArgs;
+    QStringList vf;
+    if (fps > 0) vf << QString("fps=%1").arg(fps);
+    if (speed != 1.0) vf << QString("setpts=%1*PTS").arg(1.0 / speed);
+    if (resolution > 0) vf << QString("scale=-2:%1").arg(resolution);
+
+    if (!vf.isEmpty()) filterArgs << "-vf" << vf.join(",");
+    if (speed != 1.0) filterArgs << "-af" << QString("atempo=%1").arg(speed);
+
+    auto runProcess = [&](const QStringList& args) -> bool {
+        QProcess p;
+        p.start(ffmpegExe, args);
+        while (!p.waitForFinished(100)) {
+            QCoreApplication::processEvents();
+            if (progress.wasCanceled()) {
+                p.kill();
+                return false;
+            }
+        }
+        return p.exitCode() == 0;
+        };
+
+    if (m_activeLimitMB == 0) {
+        progress.setLabelText("Safe Render (High Quality CRF 18)...");
+        QStringList args = baseArgs + filterArgs;
+        args << "-c:v" << "libx264" << "-crf" << "18"
+            << "-c:a" << "aac" << "-b:a" << "128k"
+            << outPath;
+        return runProcess(args);
+    }
+
+    double safeTargetMB = m_activeLimitMB * 0.95;
+    double totalKbps = (safeTargetMB * 8192.0) / finalDuration;
+    int videoBitrateK = qMax(50, (int)(totalKbps - 128));
+
+    QString passLogPrefix = QDir::tempPath() + "/shear_2pass_log";
+    int attempts = 0;
+    bool fileIsTooBig = true;
+
+    while (fileIsTooBig && attempts < 3) {
+        attempts++;
+        progress.setLabelText(QString("Safe Render - Pass 1/2 (Attempt %1)...").arg(attempts));
+
+        QStringList pass1Args = baseArgs + filterArgs;
+        pass1Args << "-c:v" << "libx264" << "-b:v" << QString("%1k").arg(videoBitrateK)
+            << "-pass" << "1" << "-passlogfile" << passLogPrefix
+            << "-an" << "-f" << "mp4" << "NUL";
+
+        if (!runProcess(pass1Args)) return false;
+
+        progress.setLabelText(QString("Safe Render - Pass 2/2 (Attempt %1)...").arg(attempts));
+
+        QStringList pass2Args = baseArgs + filterArgs;
+        pass2Args << "-c:v" << "libx264"
+            << "-b:v" << QString("%1k").arg(videoBitrateK)
+            << "-maxrate" << QString("%1k").arg(videoBitrateK)
+            << "-bufsize" << QString("%1k").arg(videoBitrateK * 2)
+            << "-pass" << "2" << "-passlogfile" << passLogPrefix
+            << "-c:a" << "aac" << "-b:a" << "128k"
+            << outPath;
+
+        if (!runProcess(pass2Args)) return false;
+
+        double actualMB = QFile(outPath).size() / (1024.0 * 1024.0);
+        if (actualMB <= m_activeLimitMB) {
+            fileIsTooBig = false;
+        }
+        else {
+            videoBitrateK = (int)(videoBitrateK * 0.80);
+        }
+    }
+
+    QFile::remove(passLogPrefix + "-0.log");
+    QFile::remove(passLogPrefix + "-0.log.mbtree");
+
+    return !fileIsTooBig;
 }
