@@ -94,6 +94,28 @@ Shear::Shear(QWidget* parent)
     connect(cutReturn, &QShortcut::activated, this, openCurrentVideo);
     connect(cutSpace, &QShortcut::activated, this, openCurrentVideo);
 
+    ui.listThumbnails->setContextMenuPolicy(Qt::CustomContextMenu);
+	connect(ui.listThumbnails, &QListWidget::customContextMenuRequested, this, &Shear::onListContextMenu);
+
+    // -- List-Specific Action Shortcuts --
+    QShortcut* cutRename = new QShortcut(QKeySequence(Qt::Key_D), ui.listThumbnails, nullptr, nullptr, Qt::WidgetShortcut);
+    QShortcut* cutDelete = new QShortcut(QKeySequence(Qt::Key_Backspace), ui.listThumbnails, nullptr, nullptr, Qt::WidgetShortcut);
+
+    auto renameCurrentVideo = [this]() {
+        if (QListWidgetItem* current = ui.listThumbnails->currentItem()) {
+            renameVideo(current);
+        }
+     };
+
+    auto deleteCurrentVideo = [this]() {
+        if (QListWidgetItem* current = ui.listThumbnails->currentItem()) {
+            deleteVideo(current);
+        }
+     };
+
+    connect(cutRename, &QShortcut::activated, this, renameCurrentVideo);
+    connect(cutDelete, &QShortcut::activated, this, deleteCurrentVideo);
+
     loadSettings();
 }
 
@@ -212,6 +234,106 @@ void Shear::onPrevPage() {
     if (m_currentPage > 0) {
         m_currentPage--;
         renderCurrentPage();
+    }
+}
+
+void Shear::onListContextMenu(const QPoint& pos)
+{
+    QListWidgetItem* item = ui.listThumbnails->itemAt(pos);
+    if (!item) return;
+
+    QMenu menu(this);
+    QAction* actTrim = menu.addAction("Open in Trimmer");
+    QAction* actRename = menu.addAction("Rename (F2)");
+    menu.addSeparator();
+    QAction* actDelete = menu.addAction("Delete (D)");
+
+    QAction* selected = menu.exec(ui.listThumbnails->viewport()->mapToGlobal(pos));
+    if (!selected) return;
+
+    if (selected == actTrim) {
+        onVideoDoubleClicked(item);
+    }
+    else if (selected == actRename) {
+        renameVideo(item);
+    }
+    else if (selected == actDelete) {
+        deleteVideo(item);
+    }
+}
+
+void Shear::renameVideo(QListWidgetItem* item)
+{
+    if (!item) return;
+
+    QString fullPath = item->toolTip();
+    QFileInfo fileInfo(fullPath);
+
+    QString baseName = fileInfo.completeBaseName();
+    QString extension = fileInfo.suffix();
+
+    bool ok = false;
+    QString newBaseName = QInputDialog::getText(
+        this,
+        "Rename Video",
+        QString("Enter new filename for .%1:").arg(extension),
+        QLineEdit::Normal,
+        baseName,
+        &ok
+    );
+
+    if (!ok) return;
+
+    newBaseName = newBaseName.trimmed();
+    if (newBaseName.isEmpty()) return;
+
+    // Reconstruct filename while safeguarding against double extension entry
+    QString newFileName;
+    if (!extension.isEmpty() && !newBaseName.endsWith("." + extension, Qt::CaseInsensitive)) {
+        newFileName = QString("%1.%2").arg(newBaseName, extension);
+    }
+    else {
+        newFileName = newBaseName;
+    }
+
+    // No change made
+    if (newFileName == fileInfo.fileName()) return;
+
+    QString newFullPath = fileInfo.dir().filePath(newFileName);
+
+    if (QFile::exists(newFullPath)) {
+        QMessageBox::warning(this, "Rename Error", "A file with that name already exists in this directory.");
+        return;
+    }
+
+    if (QFile::rename(fullPath, newFullPath)) {
+        onRefreshClicked(); // Rescan directory and refresh thumbnail list
+    }
+    else {
+        QMessageBox::critical(this, "Rename Error", "Could not rename the file. Ensure it isn't open in another program.");
+    }
+}
+
+void Shear::deleteVideo(QListWidgetItem* item)
+{
+    QString fullPath = item->toolTip();
+    QFileInfo fileInfo(fullPath);
+
+    QMessageBox::StandardButton reply = QMessageBox::warning(
+        this,
+        "Delete Video",
+        QString("Are you sure you want to permanently delete '%1'?\n\nThis cannot be undone.")
+        .arg(fileInfo.fileName()),
+        QMessageBox::Yes | QMessageBox::No
+    );
+
+    if (reply == QMessageBox::Yes) {
+        if (QFile::remove(fullPath)) {
+            onRefreshClicked(); 
+        }
+        else {
+            QMessageBox::critical(this, "Delete Error", "Could not delete the file. It may be open in another process.");
+        }
     }
 }
 

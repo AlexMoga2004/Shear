@@ -6,6 +6,8 @@
 #include <QPixmap>
 #include <QShortcut>
 #include <QDir> 
+#include <QMenu>
+#include <QInputDialog>
 #include "ui_Shear.h"
 
 class Shear : public QMainWindow
@@ -34,6 +36,10 @@ private slots:
     void onPrevPage();       
 
    void onVideoDoubleClicked(QListWidgetItem* item);
+
+   void onListContextMenu(const QPoint& pos);
+   void renameVideo(QListWidgetItem* item);
+   void deleteVideo(QListWidgetItem* item);
 
 
 private:
